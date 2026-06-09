@@ -15,6 +15,7 @@ import { TrashPage } from './pages/TrashPage';
 import { StarredPage } from './pages/StarredPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { SetupPage } from './pages/SetupPage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
 import { api } from './lib/api';
 
 export const App = () => {
@@ -55,6 +56,7 @@ export const App = () => {
           <Route path="/shared" element={<SharedLinksPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/starred" element={<StarredPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

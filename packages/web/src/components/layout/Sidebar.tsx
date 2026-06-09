@@ -2,6 +2,7 @@ import React from 'react';
 import { useUIStore } from '../../stores/useUIStore';
 import { useUploadStore } from '../../stores/uploadStore';
 import { useDriveStore } from '../../stores/driveStore';
+import { useAuthStore } from '../../stores/authStore';
 import { NavLink } from 'react-router-dom';
 import {
   HardDrive,
@@ -13,6 +14,7 @@ import {
   Clock,
   Star,
   FolderTree,
+  Shield,
 } from 'lucide-react';
 import { formatFileSize } from '../../lib/utils';
 
@@ -20,6 +22,7 @@ export const Sidebar: React.FC = () => {
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
   const setShowModal = useUploadStore((state) => state.setShowModal);
   const { aggregate } = useDriveStore();
+  const { user } = useAuthStore();
 
   if (!isSidebarOpen) return null;
 
@@ -75,6 +78,12 @@ export const Sidebar: React.FC = () => {
           <Trash2 size={20} />
           <span>Trash</span>
         </NavLink>
+        {user?.role === 'admin' && (
+          <NavLink to="/admin/users" className={navLinkClass}>
+            <Shield size={20} />
+            <span>User Management</span>
+          </NavLink>
+        )}
       </nav>
 
       {/* Spacer */}
