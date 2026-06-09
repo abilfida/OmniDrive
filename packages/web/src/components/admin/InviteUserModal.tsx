@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface InviteUserModalProps {
@@ -10,6 +10,18 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSub
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (email.trim()) {
@@ -18,11 +30,19 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSub
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+      onClick={onClose}
+      data-testid="modal-backdrop"
+    >
+      <div 
+        className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="modal-content"
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="text-lg font-medium text-gray-900">Invite User</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500" aria-label="Close modal">
             <X size={20} />
           </button>
         </div>
@@ -30,8 +50,9 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSub
         <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
               <input
+                id="email"
                 type="email"
                 required
                 value={email}
@@ -42,8 +63,9 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSub
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select
+                id="role"
                 value={role}
                 onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -1,0 +1,184 @@
+b830c01 feat(ui): add checkboxes to file grid for bulk selection (26 seconds ago) <abilfida>
+packages/web/src/components/files/FileGrid.tsx | 94 ++++++++++++++++++++------
+ packages/web/src/pages/FilesPage.tsx           |  2 +-
+ packages/web/src/pages/VirtualFoldersPage.tsx  |  2 +-
+ 3 files changed, 75 insertions(+), 23 deletions(-)
+
+packages/web/src/components/files/FileGrid.tsx
+  @@ -10,7 +10,8 @@ import {
+  -import { useSelectionStore } from '../../stores/useSelectionStore';
+  +import { useSelectionStore, isSameItem } from '../../stores/useSelectionStore';
+  +
+   function isGoogleNative(mimeType: string | null): boolean {
+     return !!mimeType && mimeType.startsWith('application/vnd.google-apps.');
+   }
+  @@ -179,7 +180,8 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -  const { selectedItem, setSelection } = useSelectionStore();
+  +  const { selectedItems, toggleSelection, selectAll, clearSelection } = useSelectionStore();
+  +  const hasSelection = selectedItems.length > 0;
+   
+     if (files.length === 0 && subfolders.length === 0) {
+       return (
+  @@ -196,8 +198,26 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -        <div className="grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 border-b border-gray-100 px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+  -          <span className="w-10" />
+  +        <div className="grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 border-b border-gray-100 px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide group">
+  +          <div className="w-10 flex items-center justify-center">
+  +            <input
+  +              type="checkbox"
+  +              className={`w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+  +              checked={selectedItems.length > 0 && selectedItems.length === files.length + subfolders.length}
+  +              onChange={(e) => {
+  +                if (e.target.checked) {
+  +                  const allItems: import('../../stores/useSelectionStore').SelectedItem[] = [
+  +                    ...subfolders.map(f => ({ type: 'folder' as const, item: f })),
+  +                    ...files.map(f => ({ type: 'file' as const, item: f }))
+  +                  ];
+  +                  selectAll(allItems);
+  +                } else {
+  +                  clearSelection();
+  +                }
+  +              }}
+  +              title="Select All"
+  +            />
+  +          </div>
+             <span>Name</span>
+             <span className="text-right">Size</span>
+             <span className="text-right">Modified</span>
+  @@ -220,7 +240,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                    setSelection({ type: 'folder', item: folder });
+  +                    toggleSelection({ type: 'folder', item: folder });
+                     }}
+                     onDoubleClick={() => {
+                       if (isTrashView) return;
+  @@ -231,15 +251,24 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                    selectedItem?.type === 'folder' && (isVirtual ? selectedItem.item.id === folder.id : (selectedItem.item as DriveFolder).googleFolderId === key)
+  +                    selectedItems.some(i => isSameItem(i, { type: 'folder', item: folder }))
+                         ? 'bg-blue-100 hover:bg-blue-200'
+                         : hasError
+                         ? 'bg-red-50 hover:bg-red-100'
+                         : 'hover:bg-gray-50'
+                     }`}
+                   >
+  -                  <div className="w-10 flex justify-center">
+  -                    <Folder size={20} className="text-blue-500" />
+  +                  <div className="w-10 flex justify-center items-center relative">
+  +                    <input 
+  +                      type="checkbox" 
+  +                      className={`absolute z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+  +                      checked={selectedItems.some(i => isSameItem(i, { type: 'folder', item: folder }))}
+  +                      onChange={() => toggleSelection({ type: 'folder', item: folder })}
+  +                      onClick={(e) => e.stopPropagation()}
+  +                    />
+  +                    <div className={`${hasSelection ? 'opacity-0' : 'opacity-100 group-hover:opacity-0 transition-opacity'}`}>
+  +                      <Folder size={20} className="text-blue-500" />
+  +                    </div>
+                     </div>
+                     <div className="flex items-center gap-2 min-w-0">
+                       <span className="text-sm text-gray-800 font-medium truncate">{folder.name}</span>
+  @@ -283,7 +312,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                    setSelection({ type: 'file', item: file });
+  +                    toggleSelection({ type: 'file', item: file });
+                     }}
+                     onDoubleClick={() => {
+                       if (isTrashView) {
+  @@ -295,14 +324,23 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                  className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 ${
+  -                    selectedItem?.type === 'file' && selectedItem.item.id === file.id
+  +                  className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 group ${
+  +                    selectedItems.some(i => isSameItem(i, { type: 'file', item: file }))
+                         ? 'bg-blue-100 hover:bg-blue-200'
+                         : 'hover:bg-gray-50'
+                     }`}
+                   >
+  -                  <div className="w-10 flex justify-center">
+  -                    <span className="text-xl">{getFileIcon(file.mimeType)}</span>
+  +                  <div className="w-10 flex justify-center items-center relative">
+  +                    <input 
+  +                      type="checkbox" 
+  +                      className={`absolute z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+  +                      checked={selectedItems.some(i => isSameItem(i, { type: 'file', item: file }))}
+  +                      onChange={() => toggleSelection({ type: 'file', item: file })}
+  +                      onClick={(e) => e.stopPropagation()}
+  +                    />
+  +                    <div className={`${hasSelection ? 'opacity-0' : 'opacity-100 group-hover:opacity-0 transition-opacity'}`}>
+  +                      <span className="text-xl">{getFileIcon(file.mimeType)}</span>
+  +                    </div>
+                     </div>
+                     <div className="flex items-center gap-2 min-w-0">
+                       <span className="text-sm text-gray-800 truncate" title={file.name}>{file.name}</span>
+  @@ -364,7 +402,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                  setSelection({ type: 'folder', item: folder });
+  +                  toggleSelection({ type: 'folder', item: folder });
+                   }}
+                   onDoubleClick={() => {
+                     if (isTrashView) return;
+  @@ -374,15 +412,22 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                className={`p-3 border rounded-xl cursor-pointer flex items-center gap-2.5 transition-all ${
+  -                    selectedItem?.type === 'folder' && (isVirtual ? selectedItem.item.id === folder.id : (selectedItem.item as DriveFolder).googleFolderId === key)
+  +                className={`p-3 border rounded-xl cursor-pointer flex items-center gap-2.5 transition-all group relative ${
+  +                    selectedItems.some(i => isSameItem(i, { type: 'folder', item: folder }))
+                       ? 'bg-blue-100 border-blue-300'
+                       : hasError
+                       ? 'border-red-300 bg-red-50 hover:border-red-400'
+                       : 'border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200'
+                   }`}
+                 >
+  -                <Folder size={20} className="text-blue-500 flex-shrink-0" />
+  +                <input 
+  +                  type="checkbox" 
+  +                  className={`absolute top-2 left-2 z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+  +                  checked={selectedItems.some(i => isSameItem(i, { type: 'folder', item: folder }))}
+  +                  onChange={() => toggleSelection({ type: 'folder', item: folder })}
+  +                  onClick={(e) => e.stopPropagation()}
+  +                />
+  +                <Folder size={20} className="text-blue-500 flex-shrink-0 ml-5" />
+                   <div className="flex-1 truncate text-sm font-medium text-gray-800">
+                     {folder.name}
+                   </div>
+  @@ -424,7 +469,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                  setSelection({ type: 'file', item: file });
+  +                  toggleSelection({ type: 'file', item: file });
+                   }}
+                   onDoubleClick={() => {
+                     if (isTrashView) {
+  @@ -436,14 +481,21 @@ export const FileGrid: React.FC<FileGridProps> = ({
+  -                className={`p-3 border rounded-xl cursor-pointer flex flex-col justify-between h-36 transition-all group ${
+  -                  selectedItem?.type === 'file' && selectedItem.item.id === file.id
+  +                className={`p-3 border rounded-xl cursor-pointer flex flex-col justify-between h-36 transition-all group relative ${
+  +                  selectedItems.some(i => isSameItem(i, { type: 'file', item: file }))
+                       ? 'bg-blue-100 border-blue-300'
+                       : 'bg-white border-gray-200 hover:bg-blue-50 hover:border-blue-200'
+                   }`}
+                 >
+  +                <input 
+  +                  type="checkbox" 
+  +                  className={`absolute top-2 left-2 z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+  +                  checked={selectedItems.some(i => isSameItem(i, { type: 'file', item: file }))}
+  +                  onChange={() => toggleSelection({ type: 'file', item: file })}
+  +                  onClick={(e) => e.stopPropagation()}
+  +                />
+                   <div className="flex justify-between items-start">
+  -                  <div className="text-3xl">{getFileIcon(file.mimeType)}</div>
+  +                  <div className="text-3xl ml-5">{getFileIcon(file.mimeType)}</div>
+                     <div className="flex gap-1 items-center">
+                       {file.isStarred && <Star className="fill-yellow-400 text-yellow-400 flex-shrink-0" size={14} />}
+                       {shared && <Share2 size={12} className="text-blue-400 flex-shrink-0" />}
+  +73 -21
+
+packages/web/src/pages/FilesPage.tsx
+  @@ -38,7 +38,7 @@ export function FilesPage() {
+  -    toggleSelection({ type, item });
+  +    toggleSelection({ type, item } as any);
+       setIsInfoPanelOpen(true);
+     };
+   
+  +1 -1
+
+packages/web/src/pages/VirtualFoldersPage.tsx
+  @@ -93,7 +93,7 @@ export function VirtualFoldersPage() {
+  -    toggleSelection({ type, item });
+  +    toggleSelection({ type, item } as any);
+       setIsInfoPanelOpen(true);
+     };
+  +1 -1
