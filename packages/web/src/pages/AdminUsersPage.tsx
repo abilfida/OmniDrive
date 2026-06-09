@@ -9,25 +9,29 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 
 export const AdminUsersPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>([
+    {
+      id: '1', googleId: 'g1', email: 'admin@omnidrive.com', name: 'Admin One', 
+      avatarUrl: null, role: 'admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    },
+    {
+      id: '2', googleId: 'g2', email: 'user@omnidrive.com', name: 'User Two', 
+      avatarUrl: null, role: 'user', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    }
+  ]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-
-  // In a real app, this would be an API call. For now, we mock some users.
-  useEffect(() => {
-    setUsers([
-      {
-        id: '1', googleId: 'g1', email: 'admin@omnidrive.com', name: 'Admin One', 
-        avatarUrl: null, role: 'admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-      },
-      {
-        id: '2', googleId: 'g2', email: 'user@omnidrive.com', name: 'User Two', 
-        avatarUrl: null, role: 'user', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-      }
-    ]);
-  }, []);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   if (user?.role !== 'admin') {
     return (
@@ -46,12 +50,13 @@ export const AdminUsersPage: React.FC = () => {
 
   const handleToggleStatus = (id: string, currentStatus: 'active' | 'blocked' | undefined) => {
     const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
-    setUsers(users.map(u => u.id === id ? { ...u, status: newStatus } : u));
+    setUsers(prevUsers => prevUsers.map(userItem => userItem.id === id ? { ...userItem, status: newStatus } : userItem));
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== id));
+  const confirmDelete = () => {
+    if (userToDelete) {
+      setUsers(prevUsers => prevUsers.filter(userItem => userItem.id !== userToDelete));
+      setUserToDelete(null);
     }
   };
 
@@ -80,25 +85,25 @@ export const AdminUsersPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50">
+            {users.map((userItem) => (
+              <tr key={userItem.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-medium overflow-hidden">
-                      {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : u.name.charAt(0).toUpperCase()}
+                      {userItem.avatarUrl ? <img src={userItem.avatarUrl} alt="" className="w-full h-full object-cover" /> : userItem.name.charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-sm font-medium text-gray-900">{u.name}</span>
+                    <span className="text-sm font-medium text-gray-900">{userItem.name}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{u.email}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{userItem.email}</td>
                 <td className="px-6 py-4 text-sm">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {u.role || 'user'}
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {userItem.role || 'user'}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.status === 'blocked' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    {u.status || 'active'}
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${userItem.status === 'blocked' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                    {userItem.status || 'active'}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">
@@ -109,10 +114,10 @@ export const AdminUsersPage: React.FC = () => {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-white shadow-xl rounded-xl border border-gray-200 w-40">
-                      <DropdownMenuItem className="cursor-pointer" onClick={() => handleToggleStatus(u.id, u.status)}>
-                        {u.status === 'blocked' ? 'Unblock User' : 'Block User'}
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => handleToggleStatus(userItem.id, userItem.status)}>
+                        {userItem.status === 'blocked' ? 'Unblock User' : 'Block User'}
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => handleDelete(u.id)}>
+                      <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => setUserToDelete(userItem.id)}>
                         Delete User
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -127,6 +132,31 @@ export const AdminUsersPage: React.FC = () => {
       {isInviteModalOpen && (
         <InviteUserModal onClose={() => setIsInviteModalOpen(false)} onSubmit={handleInvite} />
       )}
+
+      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this user? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setUserToDelete(null)}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

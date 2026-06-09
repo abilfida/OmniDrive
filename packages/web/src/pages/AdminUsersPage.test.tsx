@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterAll, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AdminUsersPage } from './AdminUsersPage';
 import { useAuthStore } from '../stores/authStore';
@@ -27,17 +27,27 @@ vi.mock('../components/admin/InviteUserModal', () => ({
   ),
 }));
 
-// Mock window.confirm
-const originalConfirm = window.confirm;
+vi.mock('../components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: any) => <div data-testid="dropdown-menu">{children}</div>,
+  DropdownMenuTrigger: ({ children }: any) => <div data-testid="dropdown-trigger">{children}</div>,
+  DropdownMenuContent: ({ children }: any) => <div data-testid="dropdown-content">{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: any) => (
+    <button data-testid="dropdown-item" onClick={onClick}>{children}</button>
+  ),
+}));
+
+vi.mock('../components/ui/dialog', () => ({
+  Dialog: ({ open, children }: any) => (open ? <div data-testid="dialog">{children}</div> : null),
+  DialogContent: ({ children }: any) => <div>{children}</div>,
+  DialogHeader: ({ children }: any) => <div>{children}</div>,
+  DialogTitle: ({ children }: any) => <div>{children}</div>,
+  DialogDescription: ({ children }: any) => <div>{children}</div>,
+  DialogFooter: ({ children }: any) => <div>{children}</div>,
+}));
 
 describe('AdminUsersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.confirm = vi.fn(() => true);
-  });
-
-  afterAll(() => {
-    window.confirm = originalConfirm;
   });
 
   it('renders access denied for non-admin users', () => {
@@ -81,7 +91,7 @@ describe('AdminUsersPage', () => {
     fireEvent.click(screen.getByText('Close Modal'));
     
     await waitFor(() => {
-      expect(screen.queryByTestId('invite-user-modal')).not.toBeTruthy();
+      expect(screen.queryByTestId('invite-user-modal')).toBeNull();
     });
   });
 
@@ -103,9 +113,49 @@ describe('AdminUsersPage', () => {
     expect(consoleSpy).toHaveBeenCalledWith('Inviting', 'test@example.com', 'admin');
     
     await waitFor(() => {
-      expect(screen.queryByTestId('invite-user-modal')).not.toBeTruthy();
+      expect(screen.queryByTestId('invite-user-modal')).toBeNull();
     });
     
     consoleSpy.mockRestore();
+  });
+
+  it('toggles user status', async () => {
+    (useAuthStore as unknown as Mock).mockReturnValue({
+      user: { id: 'admin1', role: 'admin' },
+    });
+
+    render(<AdminUsersPage />);
+
+    // Initially active
+    const blockButtons = screen.getAllByText('Block User');
+    fireEvent.click(blockButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Unblock User').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('deletes a user', async () => {
+    (useAuthStore as unknown as Mock).mockReturnValue({
+      user: { id: 'admin1', role: 'admin' },
+    });
+
+    render(<AdminUsersPage />);
+    
+    // Admin One exists
+    expect(screen.getByText('Admin One')).toBeTruthy();
+
+    const deleteButtons = screen.getAllByText('Delete User');
+    fireEvent.click(deleteButtons[0]);
+
+    // Dialog should be open
+    expect(screen.getByTestId('dialog')).toBeTruthy();
+
+    const confirmDeleteBtn = screen.getByRole('button', { name: 'Delete' });
+    fireEvent.click(confirmDeleteBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Admin One')).toBeNull();
+    });
   });
 });
