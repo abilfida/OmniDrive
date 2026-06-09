@@ -18,6 +18,11 @@ import {
 } from 'lucide-react';
 import { formatFileSize } from '../../lib/utils';
 
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `flex items-center gap-3 px-4 py-2 rounded-full cursor-pointer transition-colors text-sm ${
+    isActive ? 'bg-blue-100 text-gray-900 font-medium' : 'hover:bg-gray-100 text-gray-700'
+  }`;
+
 export const Sidebar: React.FC = () => {
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
   const setShowModal = useUploadStore((state) => state.setShowModal);
@@ -26,12 +31,7 @@ export const Sidebar: React.FC = () => {
 
   if (!isSidebarOpen) return null;
 
-  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-3 px-4 py-2 rounded-full cursor-pointer transition-colors text-sm ${
-      isActive ? 'bg-[#c2e7ff] text-gray-900 font-medium' : 'hover:bg-gray-100 text-gray-700'
-    }`;
-
-  const pct = aggregate.totalQuota > 0
+  const usagePercentage = aggregate.totalQuota > 0
     ? Math.min((aggregate.totalUsed / aggregate.totalQuota) * 100, 100)
     : 0;
 
@@ -101,7 +101,7 @@ export const Sidebar: React.FC = () => {
           <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mb-2">
             <div
               className="h-full rounded-full bg-blue-500 transition-all"
-              style={{ width: `${pct}%` }}
+              style={{ width: `${usagePercentage}%` }}
             />
           </div>
           <p className="text-xs text-gray-500">

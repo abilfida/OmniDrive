@@ -25,11 +25,13 @@ export const App = () => {
     api.getSetupStatus().then(res => setIsSetup(res.isSetup)).catch(() => setIsSetup(true));
   }, []);
 
-  if (isSetup === null) return null; // loading state
+  useEffect(() => {
+    if (isSetup === false && window.location.pathname !== '/setup') {
+      window.location.href = '/setup';
+    }
+  }, [isSetup]);
 
-  if (isSetup === false && window.location.pathname !== '/setup') {
-    window.location.href = '/setup';
-  }
+  if (isSetup === null) return null; // loading state
 
   return (
     <BrowserRouter>
