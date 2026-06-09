@@ -17,6 +17,10 @@ import { WorkspacesPage } from './pages/WorkspacesPage';
 import { SetupPage } from './pages/SetupPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { api } from './lib/api';
+export const SetupGuard = ({ children, isSetup }: { children: React.ReactNode, isSetup: boolean }) => {
+  if (isSetup === false) return <Navigate to="/setup" replace />;
+  return <>{children}</>;
+};
 
 export const App = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -24,14 +28,6 @@ export const App = () => {
   useEffect(() => {
     api.getSetupStatus().then(res => setIsSetup(res.isSetup)).catch(() => setIsSetup(true));
   }, []);
-
-  if (isSetup === false && window.location.pathname !== '/setup') {
-    return (
-      <BrowserRouter>
-        <Navigate to="/setup" replace />
-      </BrowserRouter>
-    );
-  }
 
   if (isSetup === null) return null; // loading state
 
@@ -43,10 +39,12 @@ export const App = () => {
         <Route path="/shared/:id" element={<PublicSharedPage />} />
         <Route
           element={
-            <AuthGuard>
-              <AppLayout />
-              <ToastContainer />
-            </AuthGuard>
+            <SetupGuard isSetup={isSetup}>
+              <AuthGuard>
+                <AppLayout />
+                <ToastContainer />
+              </AuthGuard>
+            </SetupGuard>
           }
         >
           <Route path="/" element={<DashboardPage />} />
