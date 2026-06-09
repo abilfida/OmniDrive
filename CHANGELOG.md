@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-06-10
+
+### Added
+
+- **User & Team Management:**
+  - Dynamic user profile display in Header based on authentication state
+  - Global `AdminUsersPage` for managing all users (restricted to admins)
+  - Features to invite, block/unblock, and delete users
+  - Proper UI components for invitations (`InviteUserModal`) and routing guards (`SetupGuard`)
+
 ## [0.2.0] - 2026-06-09
 
 ### Added
