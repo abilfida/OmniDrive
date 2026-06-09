@@ -15,9 +15,9 @@ describe('Workspace Tab Components', () => {
     expect(screen.getByText('Members (Coming Soon)')).toBeDefined();
   });
 
-  it('renders Settings tab placeholder', () => {
+  it('renders Settings tab Storage & Quota section', () => {
     render(<WorkspaceSettingsTab />);
-    expect(screen.getByText('Settings (Coming Soon)')).toBeDefined();
+    expect(screen.getByText('Storage & Quota')).toBeDefined();
   });
 
   it('renders Files tab with FileGrid mock', () => {

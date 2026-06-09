@@ -1,23 +1,24 @@
 import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { InviteUserModal } from './InviteUserModal';
 
 describe('InviteUserModal', () => {
-  const mockOnClose = jest.fn();
-  const mockOnSubmit = jest.fn();
+  const mockOnClose = vi.fn();
+  const mockOnSubmit = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders correctly', () => {
     render(<InviteUserModal onClose={mockOnClose} onSubmit={mockOnSubmit} />);
     
-    expect(screen.getByText('Invite User')).toBeInTheDocument();
-    expect(screen.getByLabelText('Email Address')).toBeInTheDocument();
-    expect(screen.getByLabelText('Role')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send Invite' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByText('Invite User')).toBeDefined();
+    expect(screen.getByLabelText('Email Address')).toBeDefined();
+    expect(screen.getByLabelText('Role')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Send Invite' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
   });
 
   it('calls onSubmit with correct values', () => {
