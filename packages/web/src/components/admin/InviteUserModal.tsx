@@ -3,12 +3,12 @@ import { X } from 'lucide-react';
 
 interface InviteUserModalProps {
   onClose: () => void;
-  onSubmit: (email: string, role: 'admin' | 'user') => void;
+  onSubmit: (email: string, role: 'super_admin' | 'member') => void;
 }
 
 export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSubmit }) => {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'user'>('user');
+  const [role, setRole] = useState<'super_admin' | 'member'>('member');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,11 +67,11 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({ onClose, onSub
               <select
                 id="role"
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
+                onChange={(e) => setRole(e.target.value as 'super_admin' | 'member')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
+                <option value="member">Member</option>
+                <option value="super_admin">Super Admin</option>
               </select>
             </div>
           </div>

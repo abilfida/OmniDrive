@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Features to invite, block/unblock, and delete users
   - Proper UI components for invitations (`InviteUserModal`) and routing guards (`SetupGuard`)
 
+### Fixed
+
+- **Role Management:**
+  - Standardized user roles to `super_admin` and `member` across backend and frontend.
+  - Ensured new users correctly default to `member` role upon registration.
+  - Prevented non-admin users from viewing or interacting with the "Admin: Invitation Codes" component in the settings page.
+
 ## [0.2.0] - 2026-06-09
 
 ### Added

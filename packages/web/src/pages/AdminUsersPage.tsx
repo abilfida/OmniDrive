@@ -23,17 +23,17 @@ export const AdminUsersPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([
     {
       id: '1', googleId: 'g1', email: 'admin@omnidrive.com', name: 'Admin One', 
-      avatarUrl: null, role: 'admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      avatarUrl: null, role: 'super_admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     },
     {
-      id: '2', googleId: 'g2', email: 'user@omnidrive.com', name: 'User Two', 
-      avatarUrl: null, role: 'user', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: '3', googleId: 'g3', email: 'user2@omnidrive.com', name: 'User Three', 
+      avatarUrl: null, role: 'member', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     }
   ]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-  if (user?.role !== 'admin') {
+  if (user?.role !== 'super_admin') {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-500">
         <ShieldAlert size={48} className="text-red-400 mb-4" />
@@ -43,7 +43,7 @@ export const AdminUsersPage: React.FC = () => {
     );
   }
 
-  const handleInvite = (email: string, role: 'admin' | 'user') => {
+  const handleInvite = (email: string, role: 'super_admin' | 'member') => {
     console.log('Inviting', email, role);
     setIsInviteModalOpen(false);
   };
@@ -97,8 +97,8 @@ export const AdminUsersPage: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">{userItem.email}</td>
                 <td className="px-6 py-4 text-sm">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {userItem.role || 'user'}
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${userItem.role === 'super_admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {userItem.role || 'member'}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm">

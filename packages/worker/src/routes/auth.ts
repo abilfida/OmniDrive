@@ -44,7 +44,7 @@ authRouter.post('/register', async (c) => {
     'INSERT INTO users (id, username, password_hash, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, username, passwordHash, email || null, username, isSuperAdmin).run();
 
-  const sessionData: SessionData = { userId: id, username, email: email || null, name: username, avatarUrl: null };
+  const sessionData: SessionData = { userId: id, username, email: email || null, name: username, avatarUrl: null, role: isSuperAdmin ? 'super_admin' : 'member' };
   const sessionId = generateId();
   
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 });
@@ -57,12 +57,12 @@ authRouter.post('/login', async (c) => {
   const { username, password } = await c.req.json();
   if (!username || !password) throw new AppError(400, 'Username and password required');
 
-  const user = await c.env.DB.prepare('SELECT id, username, password_hash, email, name, avatar_url FROM users WHERE username = ?').bind(username).first<any>();
+  const user = await c.env.DB.prepare('SELECT id, username, password_hash, email, name, avatar_url, is_super_admin FROM users WHERE username = ?').bind(username).first<any>();
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw new AppError(401, 'Invalid credentials');
   }
 
-  const sessionData: SessionData = { userId: user.id, username: user.username, email: user.email, name: user.name, avatarUrl: user.avatar_url };
+  const sessionData: SessionData = { userId: user.id, username: user.username, email: user.email, name: user.name, avatarUrl: user.avatar_url, role: user.is_super_admin ? 'super_admin' : 'member' };
   const sessionId = generateId();
   
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 });

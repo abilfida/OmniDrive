@@ -29,10 +29,10 @@ describe('InviteUserModal', () => {
     const submitButton = screen.getByRole('button', { name: 'Send Invite' });
 
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.change(roleSelect, { target: { value: 'admin' } });
+    fireEvent.change(roleSelect, { target: { value: 'super_admin' } });
     fireEvent.click(submitButton);
 
-    expect(mockOnSubmit).toHaveBeenCalledWith('test@example.com', 'admin');
+    expect(mockOnSubmit).toHaveBeenCalledWith('test@example.com', 'super_admin');
   });
 
   it('calls onClose when cancel is clicked', () => {

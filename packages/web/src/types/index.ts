@@ -4,7 +4,7 @@ export interface User {
   email: string;
   name: string;
   avatarUrl: string | null;
-  role?: 'admin' | 'user';
+  role?: 'super_admin' | 'member';
   status?: 'active' | 'blocked';
   createdAt: string;
   updatedAt: string;

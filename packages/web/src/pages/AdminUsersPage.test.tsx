@@ -52,7 +52,7 @@ describe('AdminUsersPage', () => {
 
   it('renders access denied for non-admin users', () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'user1', role: 'user' },
+      user: { id: 'user1', role: 'member' },
     });
 
     render(<AdminUsersPage />);
@@ -63,7 +63,7 @@ describe('AdminUsersPage', () => {
 
   it('renders the user management table for admin users', () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'admin' },
+      user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
@@ -71,12 +71,12 @@ describe('AdminUsersPage', () => {
     expect(screen.getByText('User Management')).toBeTruthy();
     expect(screen.getByRole('button', { name: /invite user/i })).toBeTruthy();
     expect(screen.getByText('Admin One')).toBeTruthy();
-    expect(screen.getByText('User Two')).toBeTruthy();
+    expect(screen.getByText('User Three')).toBeTruthy();
   });
 
   it('opens and closes the invite modal', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'admin' },
+      user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
@@ -97,7 +97,7 @@ describe('AdminUsersPage', () => {
 
   it('submits the invite modal and closes it', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'admin' },
+      user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
@@ -121,7 +121,7 @@ describe('AdminUsersPage', () => {
 
   it('toggles user status', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'admin' },
+      user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
@@ -137,7 +137,7 @@ describe('AdminUsersPage', () => {
 
   it('deletes a user', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'admin' },
+      user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);

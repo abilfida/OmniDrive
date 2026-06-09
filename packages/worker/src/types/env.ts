@@ -13,6 +13,7 @@ export interface SessionData {
   email?: string | null;
   name?: string | null;
   avatarUrl?: string | null;
+  role: 'super_admin' | 'member';
 }
 
 export type AppContext = {
