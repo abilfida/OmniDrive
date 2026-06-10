@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  web:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-abilfida}/omnidrive-web:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    depends_on:
+      - worker
+
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-abilfida}/omnidrive-worker:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: packages/worker/Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - worker-data:/app/packages/worker/.wrangler
+    restart: unless-stopped
+
+volumes:
+  worker-data:
