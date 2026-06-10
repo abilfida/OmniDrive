@@ -103,9 +103,9 @@ export const InfoPanel: React.FC = () => {
         
         <div className="border-t border-gray-100 pt-4">
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tags & Metadata</h4>
-          {item.metadata ? (
+          {('metadata' in item && item.metadata) ? (
             <div className="flex flex-wrap gap-2 mb-3">
-              {Object.entries(typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata).map(([k, v]) => (
+              {Object.entries(typeof (item as any).metadata === 'string' ? JSON.parse((item as any).metadata) : (item as any).metadata).map(([k, v]) => (
                 <div key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
                   <span className="font-semibold mr-1">{k}:</span> {v as string}
                 </div>
@@ -122,18 +122,18 @@ export const InfoPanel: React.FC = () => {
               const value = (form.elements.namedItem('metaValue') as HTMLInputElement).value;
               if (!key || !value) return;
 
-              const api = await import('../../lib/api');
-              const currentMeta = typeof item.metadata === 'string' ? JSON.parse(item.metadata || '{}') : (item.metadata || {});
+              const { api } = await import('../../lib/api');
+              const currentMeta = typeof (item as any).metadata === 'string' ? JSON.parse((item as any).metadata || '{}') : ((item as any).metadata || {});
               const newMeta = { ...currentMeta, [key]: value };
 
               try {
                 if (type === 'file') {
                   await api.updateFileMetadata(item.id, newMeta);
                 } else if ((item as any).workspaceId) {
-                  await api.updateFolderMetadata((item as any).workspaceId, item.id, newMeta);
+                  await api.updateFolderMetadata((item as any).workspaceId, item.id!, newMeta);
                 }
                 // Update local state temporarily for UX
-                item.metadata = newMeta;
+                (item as any).metadata = newMeta;
                 form.reset();
               } catch (err) {
                 console.error(err);

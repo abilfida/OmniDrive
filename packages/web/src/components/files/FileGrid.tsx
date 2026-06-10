@@ -308,7 +308,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     <span className="text-sm text-gray-800 font-medium truncate">{folder.name}</span>
                     {isStarred && <Star className="fill-yellow-400 text-yellow-400 flex-shrink-0" size={14} />}
                     {shared && <Share2 size={12} className="text-blue-400 flex-shrink-0" />}
-                    {renderMetadataBadges(folder.metadata)}
+                    {renderMetadataBadges('metadata' in folder ? folder.metadata : undefined)}
                   </div>
                   <div className="text-right text-xs text-gray-400">—</div>
                   <div className="text-right text-xs text-gray-400">—</div>

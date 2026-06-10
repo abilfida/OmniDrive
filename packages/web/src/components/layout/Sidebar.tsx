@@ -78,7 +78,7 @@ export const Sidebar: React.FC = () => {
           <Trash2 size={20} />
           <span>Trash</span>
         </NavLink>
-        {user?.role === 'admin' && (
+        {user?.role === 'super_admin' && (
           <NavLink to="/admin/users" className={navLinkClass}>
             <Shield size={20} />
             <span>User Management</span>
