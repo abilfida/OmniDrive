@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 
 export function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -15,7 +16,7 @@ export function LoginPage() {
     setErrorMsg('');
     try {
       if (isRegister) {
-        await api.register({ username, password, email, invitation_code: invitationCode });
+        await api.register({ name, username, password, email, invitation_code: invitationCode });
       } else {
         await api.login({ username, password });
       }
@@ -53,6 +54,10 @@ export function LoginPage() {
             
             {isRegister && (
               <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500" />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500" />
