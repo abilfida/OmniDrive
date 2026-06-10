@@ -2,13 +2,11 @@ import { useEffect, useState } from 'react';
 import { useDriveStore } from '../stores/driveStore';
 import { DriveAccountCard } from '../components/DriveAccountCard';
 import { useToastStore } from '../stores/toastStore';
-import { useAuthStore } from '../stores/authStore';
 import { Plus, Key, X } from 'lucide-react';
 
 export function SettingsPage() {
   const { drives, fetchDrives, removeDrive, triggerSync } = useDriveStore();
   const { addToast } = useToastStore();
-  const { user } = useAuthStore();
   const [showSaForm, setShowSaForm] = useState(false);
   const [saCredentials, setSaCredentials] = useState('');
   const [saFolderId, setSaFolderId] = useState('');
