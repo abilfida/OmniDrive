@@ -7,3 +7,7 @@
 
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Security secrets — generate with: node -e "console.log(crypto.randomUUID().replace(/-/g,''))"
+JWT_SECRET=your-random-32-char-jwt-secret-here
+TOKEN_ENCRYPTION_KEY=your-random-32-char-encryption-key

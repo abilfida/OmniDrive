@@ -24,6 +24,11 @@ id = "<your-kv-namespace-id>"
 FRONTEND_URL = "http://localhost:5173"
 WORKER_URL = "http://localhost:8787"
 
+# Security secrets — set via:
+#   npx wrangler secret put JWT_SECRET
+#   npx wrangler secret put TOKEN_ENCRYPTION_KEY
+# Generate with: node -e "console.log(crypto.randomUUID().replace(/-/g,''))"
+
 [observability]
 enabled = false
 head_sampling_rate = 1
