@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-06-10
+
+### Security
+
+- **Comprehensive Security Hardening:**
+  - Implemented CSRF guard middleware with Origin/Referer validation on all mutating API endpoints
+  - Added in-memory sliding window rate limiting for authentication, shared link verification, and global APIs
+  - Added security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, CSP)
+  - Fixed IDOR vulnerabilities in shared link creation and downloading by enforcing ownership scoping
+  - Hardened JWT signing by using a dedicated `JWT_SECRET` key and enforcing token expiration
+  - Added AES-256-GCM encryption for Google OAuth tokens at rest in KV storage
+  - Integrated PKCE (Proof Key for Code Exchange) S256 into the OAuth flow
+  - Enforced strong password complexity requirements
+  - Prevented SSRF (Server-Side Request Forgery) via webhook URL validation
+  - Tightened CORS policy to strictly limit localhost access during development
+  - Sanitized API error messages to prevent internal details leakage
+  - Prevented role escalation when assigning workspace members
+  - Enforced a 30-day absolute session lifetime limit
+
 ## [0.3.0] - 2026-06-10
 
 ### Added

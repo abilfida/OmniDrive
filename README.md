@@ -26,6 +26,16 @@ Omnidrive lets you connect multiple Google Drive accounts and manage all your fi
 - **🔄 Real-Time Sync** — Automatic sync via Google Drive Changes API (cron every 30 minutes)
 - **🌙 Dark Mode** — Modern dark theme UI with Notion-style hierarchical workspace sidebar
 
+## Security
+
+Omnidrive implements a robust security model to protect your files and data:
+- **Token Encryption**: Google OAuth tokens are encrypted at rest using AES-256-GCM.
+- **CSRF & SSRF Protection**: All mutating endpoints are protected against Cross-Site Request Forgery, and webhooks are validated against Server-Side Request Forgery.
+- **Rate Limiting**: Built-in sliding window rate limiters protect authentication and public endpoints from brute-force attacks.
+- **OAuth PKCE**: Authentication flow uses Proof Key for Code Exchange (S256) for enhanced security.
+- **Strict Access Control**: Enforced RBAC role escalation prevention and IDOR (Insecure Direct Object Reference) prevention on all resource access.
+
+
 ## Tech Stack
 
 | Layer | Technology |

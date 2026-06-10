@@ -26,6 +26,16 @@ Omnidrive memungkinkan kamu menghubungkan beberapa akun Google Drive dan mengelo
 - **🔄 Sinkronisasi Real-Time** — Sinkronisasi otomatis via Google Drive Changes API (cron setiap 30 menit)
 - **🌙 Mode Gelap** — UI tema gelap modern dengan sidebar workspace hierarkis ala Notion
 
+## Keamanan
+
+Omnidrive mengimplementasikan model keamanan yang tangguh untuk melindungi file dan data kamu:
+- **Enkripsi Token**: Token Google OAuth dienkripsi saat istirahat (at rest) menggunakan AES-256-GCM.
+- **Proteksi CSRF & SSRF**: Semua endpoint mutasi dilindungi dari Cross-Site Request Forgery, dan webhook divalidasi untuk mencegah Server-Side Request Forgery.
+- **Rate Limiting**: Rate limiter bawaan dengan sliding window melindungi autentikasi dan endpoint publik dari serangan brute-force.
+- **OAuth PKCE**: Alur autentikasi menggunakan Proof Key for Code Exchange (S256) untuk keamanan tambahan.
+- **Kontrol Akses Ketat**: Pencegahan eskalasi peran RBAC dan pencegahan IDOR (Insecure Direct Object Reference) pada semua akses sumber daya.
+
+
 ## Tech Stack
 
 | Layer | Teknologi |
@@ -176,6 +186,8 @@ Atau gunakan [dashboard Cloudflare Pages](https://dash.cloudflare.com/?to=/:acco
 |----------|-----------|
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
+| `JWT_SECRET` | Kunci khusus untuk menandatangani JWT link yang dibagikan (minimal 32 karakter) |
+| `TOKEN_ENCRYPTION_KEY` | Kunci AES-256-GCM untuk mengenkripsi token OAuth saat istirahat (32 karakter) |
 
 ### Konfigurasi Worker (set di `wrangler.toml` `[vars]`)
 
