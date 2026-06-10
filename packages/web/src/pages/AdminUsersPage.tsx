@@ -20,16 +20,7 @@ import {
 
 export const AdminUsersPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: '1', googleId: 'g1', email: 'admin@omnidrive.com', name: 'Admin One', 
-      avatarUrl: null, role: 'super_admin', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    },
-    {
-      id: '3', googleId: 'g3', email: 'user2@omnidrive.com', name: 'User Three', 
-      avatarUrl: null, role: 'member', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    }
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
@@ -45,6 +36,18 @@ export const AdminUsersPage: React.FC = () => {
 
   const handleInvite = (email: string, role: 'super_admin' | 'member') => {
     console.log('Inviting', email, role);
+    const newUser: User = {
+      id: Math.random().toString(),
+      googleId: 'g' + Math.random().toString(),
+      email,
+      name: email.split('@')[0],
+      avatarUrl: null,
+      role,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newUser]);
     setIsInviteModalOpen(false);
   };
 
@@ -114,10 +117,10 @@ export const AdminUsersPage: React.FC = () => {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-white shadow-xl rounded-xl border border-gray-200 w-40">
-                      <DropdownMenuItem className="cursor-pointer" onClick={() => handleToggleStatus(userItem.id, userItem.status)}>
+                      <DropdownMenuItem className="cursor-pointer" onSelect={() => handleToggleStatus(userItem.id, userItem.status)}>
                         {userItem.status === 'blocked' ? 'Unblock User' : 'Block User'}
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onClick={() => setUserToDelete(userItem.id)}>
+                      <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onSelect={() => setUserToDelete(userItem.id)}>
                         Delete User
                       </DropdownMenuItem>
                     </DropdownMenuContent>

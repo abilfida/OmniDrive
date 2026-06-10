@@ -22,7 +22,7 @@ vi.mock('../components/admin/InviteUserModal', () => ({
   InviteUserModal: ({ onClose, onSubmit }: any) => (
     <div data-testid="invite-user-modal">
       <button onClick={onClose}>Close Modal</button>
-      <button onClick={() => onSubmit('test@example.com', 'admin')}>Submit Modal</button>
+      <button onClick={() => onSubmit('test@example.com', 'super_admin')}>Submit Modal</button>
     </div>
   ),
 }));
@@ -31,8 +31,8 @@ vi.mock('../components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: any) => <div data-testid="dropdown-menu">{children}</div>,
   DropdownMenuTrigger: ({ children }: any) => <div data-testid="dropdown-trigger">{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div data-testid="dropdown-content">{children}</div>,
-  DropdownMenuItem: ({ children, onClick }: any) => (
-    <button data-testid="dropdown-item" onClick={onClick}>{children}</button>
+  DropdownMenuItem: ({ children, onClick, onSelect }: any) => (
+    <button data-testid="dropdown-item" onClick={onClick || onSelect}>{children}</button>
   ),
 }));
 
@@ -70,8 +70,6 @@ describe('AdminUsersPage', () => {
 
     expect(screen.getByText('User Management')).toBeTruthy();
     expect(screen.getByRole('button', { name: /invite user/i })).toBeTruthy();
-    expect(screen.getByText('Admin One')).toBeTruthy();
-    expect(screen.getByText('User Three')).toBeTruthy();
   });
 
   it('opens and closes the invite modal', async () => {
@@ -110,7 +108,7 @@ describe('AdminUsersPage', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
     fireEvent.click(screen.getByText('Submit Modal'));
     
-    expect(consoleSpy).toHaveBeenCalledWith('Inviting', 'test@example.com', 'admin');
+    expect(consoleSpy).toHaveBeenCalledWith('Inviting', 'test@example.com', 'super_admin');
     
     await waitFor(() => {
       expect(screen.queryByTestId('invite-user-modal')).toBeNull();
@@ -126,8 +124,12 @@ describe('AdminUsersPage', () => {
 
     render(<AdminUsersPage />);
 
+    // Invite a user first
+    fireEvent.click(screen.getByRole('button', { name: /invite user/i }));
+    fireEvent.click(screen.getByText('Submit Modal'));
+
     // Initially active
-    const blockButtons = screen.getAllByText('Block User');
+    const blockButtons = await screen.findAllByText('Block User');
     fireEvent.click(blockButtons[0]);
 
     await waitFor(() => {
@@ -142,10 +144,14 @@ describe('AdminUsersPage', () => {
 
     render(<AdminUsersPage />);
     
-    // Admin One exists
-    expect(screen.getByText('Admin One')).toBeTruthy();
+    // Invite a user first
+    fireEvent.click(screen.getByRole('button', { name: /invite user/i }));
+    fireEvent.click(screen.getByText('Submit Modal'));
 
-    const deleteButtons = screen.getAllByText('Delete User');
+    // User exists
+    expect(screen.getByText('test')).toBeTruthy();
+
+    const deleteButtons = await screen.findAllByText('Delete User');
     fireEvent.click(deleteButtons[0]);
 
     // Dialog should be open
@@ -155,7 +161,7 @@ describe('AdminUsersPage', () => {
     fireEvent.click(confirmDeleteBtn);
 
     await waitFor(() => {
-      expect(screen.queryByText('Admin One')).toBeNull();
+      expect(screen.queryByText('test')).toBeNull();
     });
   });
 });
