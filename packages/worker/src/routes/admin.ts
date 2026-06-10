@@ -3,6 +3,8 @@ import type { AppContext } from '../types/env';
 import { authGuard } from '../middleware/auth-guard';
 import { AppError } from '../middleware/error-handler';
 import { generateId } from '../lib/id';
+import * as bcrypt from 'bcryptjs';
+import { validatePassword } from '../lib/validation';
 
 export const adminRouter = new Hono<AppContext>({ strict: false });
 
@@ -50,4 +52,34 @@ adminRouter.get('/audit-logs', async (c) => {
   ).all();
 
   return c.json({ logs: results });
+});
+
+adminRouter.get('/users', async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT id, username, email, name, avatar_url, is_super_admin as role FROM users ORDER BY created_at DESC LIMIT 100').all();
+  return c.json({ users: results.map(u => ({ ...u, role: u.role ? 'super_admin' : 'member', status: 'active' })) });
+});
+
+adminRouter.post('/users', async (c) => {
+  const { name, username, password, email, role } = await c.req.json();
+  if (!username || !password) throw new AppError(400, 'Username and password required');
+  const passwordError = validatePassword(password);
+  if (passwordError) throw new AppError(400, passwordError);
+
+  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
+  if (existing) throw new AppError(400, 'Username already exists');
+
+  if (email) {
+    const existingEmail = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    if (existingEmail) throw new AppError(400, 'Email already exists');
+  }
+
+  const id = generateId();
+  const passwordHash = await bcrypt.hash(password, 10);
+  const isSuperAdmin = role === 'super_admin' ? 1 : 0;
+
+  await c.env.DB.prepare(
+    'INSERT INTO users (id, username, password_hash, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, username, passwordHash, email || null, name || username, isSuperAdmin).run();
+
+  return c.json({ success: true, user: { id, username, email, name: name || username, role: isSuperAdmin ? 'super_admin' : 'member', status: 'active' } });
 });

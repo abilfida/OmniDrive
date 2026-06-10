@@ -18,7 +18,7 @@ authRouter.get('/setup-status', async (c) => {
 });
 
 authRouter.post('/register', async (c) => {
-  const { username, password, email, invitation_code } = await c.req.json();
+  const { name, username, password, email, invitation_code } = await c.req.json();
   if (!username || !password) throw new AppError(400, 'Username and password required');
 
   const passwordError = validatePassword(password);
@@ -42,15 +42,20 @@ authRouter.post('/register', async (c) => {
   const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
   if (existing) throw new AppError(400, 'Username already exists');
 
+  if (email) {
+    const existingEmail = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    if (existingEmail) throw new AppError(400, 'Email already exists');
+  }
+
   const id = generateId();
   const passwordHash = await bcrypt.hash(password, 10);
   const isSuperAdmin = isSetup ? 0 : 1;
   
   await db.prepare(
     'INSERT INTO users (id, username, password_hash, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, username, passwordHash, email || null, username, isSuperAdmin).run();
+  ).bind(id, username, passwordHash, email || null, name || username, isSuperAdmin).run();
 
-  const sessionData: SessionData = { userId: id, username, email: email || null, name: username, avatarUrl: null, role: isSuperAdmin ? 'super_admin' : 'member', createdAt: Date.now() };
+  const sessionData: SessionData = { userId: id, username, email: email || null, name: name || username, avatarUrl: null, role: isSuperAdmin ? 'super_admin' : 'member', createdAt: Date.now() };
   const sessionId = generateId();
   
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 });
