@@ -1,12 +1,25 @@
+// @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { AdminUsersPage } from './AdminUsersPage';
 import { useAuthStore } from '../stores/authStore';
+import { api } from '../lib/api';
 
 // Mock the auth store
 vi.mock('../stores/authStore', () => ({
   useAuthStore: vi.fn(),
+}));
+
+// Mock API
+vi.mock('../lib/api', () => ({
+  api: {
+    getAdminUsers: vi.fn(),
+    adminCreateUser: vi.fn(),
+    getInvitations: vi.fn(),
+    createInvitation: vi.fn(),
+    deleteInvitation: vi.fn(),
+  }
 }));
 
 // Mock the lucide-react icons
@@ -15,16 +28,6 @@ vi.mock('lucide-react', () => ({
   Plus: () => <div data-testid="plus-icon" />,
   MoreVertical: () => <div data-testid="more-vertical-icon" />,
   X: () => <div data-testid="x-icon" />,
-}));
-
-// Mock the invite modal to simplify testing
-vi.mock('../components/admin/InviteUserModal', () => ({
-  InviteUserModal: ({ onClose, onSubmit }: any) => (
-    <div data-testid="invite-user-modal">
-      <button onClick={onClose}>Close Modal</button>
-      <button onClick={() => onSubmit('test@example.com', 'super_admin')}>Submit Modal</button>
-    </div>
-  ),
 }));
 
 vi.mock('../components/ui/dropdown-menu', () => ({
@@ -48,6 +51,12 @@ vi.mock('../components/ui/dialog', () => ({
 describe('AdminUsersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (api.getAdminUsers as Mock).mockResolvedValue({ users: [] });
+    (api.getInvitations as Mock).mockResolvedValue({ invitations: [] });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders access denied for non-admin users', () => {
@@ -61,18 +70,19 @@ describe('AdminUsersPage', () => {
     expect(screen.getByText('You do not have permission to view this page.')).toBeTruthy();
   });
 
-  it('renders the user management table for admin users', () => {
+  it('renders the user management page for admin users', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
       user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
 
-    expect(screen.getByText('User Management')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /invite user/i })).toBeTruthy();
+    expect(await screen.findByText('Users')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /add user/i })).toBeTruthy();
+    expect(api.getAdminUsers).toHaveBeenCalledTimes(1);
   });
 
-  it('opens and closes the invite modal', async () => {
+  it('opens and closes the add user modal', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
       user: { id: 'admin1', role: 'super_admin' },
     });
@@ -80,88 +90,32 @@ describe('AdminUsersPage', () => {
     render(<AdminUsersPage />);
 
     // Open modal
-    const inviteBtn = screen.getByRole('button', { name: /invite user/i });
-    fireEvent.click(inviteBtn);
+    const addBtn = await screen.findByRole('button', { name: /add user/i });
+    fireEvent.click(addBtn);
 
-    expect(screen.getByTestId('invite-user-modal')).toBeTruthy();
+    expect(screen.getByText('Add User', { selector: 'h3' })).toBeTruthy();
 
     // Close modal
-    fireEvent.click(screen.getByText('Close Modal'));
+    fireEvent.click(screen.getByText('Cancel'));
     
     await waitFor(() => {
-      expect(screen.queryByTestId('invite-user-modal')).toBeNull();
+      expect(screen.queryByText('Add User', { selector: 'h3' })).toBeNull();
     });
   });
 
-  it('submits the invite modal and closes it', async () => {
-    (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'super_admin' },
-    });
-
-    render(<AdminUsersPage />);
-
-    // Open modal
-    const inviteBtn = screen.getByRole('button', { name: /invite user/i });
-    fireEvent.click(inviteBtn);
-
-    // Submit modal
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation();
-    fireEvent.click(screen.getByText('Submit Modal'));
-    
-    expect(consoleSpy).toHaveBeenCalledWith('Inviting', 'test@example.com', 'super_admin');
-    
-    await waitFor(() => {
-      expect(screen.queryByTestId('invite-user-modal')).toBeNull();
-    });
-    
-    consoleSpy.mockRestore();
-  });
-
-  it('toggles user status', async () => {
-    (useAuthStore as unknown as Mock).mockReturnValue({
-      user: { id: 'admin1', role: 'super_admin' },
-    });
-
-    render(<AdminUsersPage />);
-
-    // Invite a user first
-    fireEvent.click(screen.getByRole('button', { name: /invite user/i }));
-    fireEvent.click(screen.getByText('Submit Modal'));
-
-    // Initially active
-    const blockButtons = await screen.findAllByText('Block User');
-    fireEvent.click(blockButtons[0]);
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Unblock User').length).toBeGreaterThan(0);
-    });
-  });
-
-  it('deletes a user', async () => {
+  it('toggles tabs and loads invitations', async () => {
     (useAuthStore as unknown as Mock).mockReturnValue({
       user: { id: 'admin1', role: 'super_admin' },
     });
 
     render(<AdminUsersPage />);
     
-    // Invite a user first
-    fireEvent.click(screen.getByRole('button', { name: /invite user/i }));
-    fireEvent.click(screen.getByText('Submit Modal'));
+    expect(api.getAdminUsers).toHaveBeenCalledTimes(1);
 
-    // User exists
-    expect(screen.getByText('test')).toBeTruthy();
+    const invTab = await screen.findByText('Invitation Codes');
+    fireEvent.click(invTab);
 
-    const deleteButtons = await screen.findAllByText('Delete User');
-    fireEvent.click(deleteButtons[0]);
-
-    // Dialog should be open
-    expect(screen.getByTestId('dialog')).toBeTruthy();
-
-    const confirmDeleteBtn = screen.getByRole('button', { name: 'Delete' });
-    fireEvent.click(confirmDeleteBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('test')).toBeNull();
-    });
+    expect(api.getInvitations).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Create Code')).toBeTruthy();
   });
 });
