@@ -7,6 +7,8 @@ import { authGuard } from '../middleware/auth-guard';
 import { mapSharedLinkRow, type SharedLink } from '../types';
 import { generateId } from '../lib/id';
 import { GoogleDriveService } from '../services/google-drive';
+import { validateWebhookUrl } from '../lib/validation';
+
 
 export const sharedRouter = new Hono<AppContext>({ strict: false });
 
@@ -32,7 +34,7 @@ async function validateSharedLink(c: Context<AppContext>, link: SharedLink): Pro
   const sessionCookie = getCookie(c, `shared_session_${link.id}`);
   if (sessionCookie) {
     try {
-      const payload = await verify(sessionCookie, c.env.GOOGLE_CLIENT_SECRET, 'HS256');
+      const payload = await verify(sessionCookie, c.env.JWT_SECRET, 'HS256');
       if (payload.id === link.id) {
         return { ok: true };
       }
@@ -62,6 +64,21 @@ sharedRouter.post('/', authGuard, async (c) => {
   }
 
   const db = c.env.DB;
+
+  // Verify ownership of target
+  if (targetType === 'file') {
+    const file = await db.prepare('SELECT id FROM files WHERE id = ? AND user_id = ?').bind(targetId, userId).first();
+    if (!file) return c.json({ error: 'You do not own this file' }, 403);
+  } else if (targetType === 'folder') {
+    const folder = await db.prepare('SELECT id FROM virtual_folders WHERE id = ? AND user_id = ?').bind(targetId, userId).first();
+    if (!folder) return c.json({ error: 'You do not own this folder' }, 403);
+  }
+
+  // Validate webhook URL if provided
+  if (webhookUrl) {
+    const webhookError = validateWebhookUrl(webhookUrl);
+    if (webhookError) return c.json({ error: webhookError }, 400);
+  }
   
   let passwordHash = null;
   
@@ -102,7 +119,7 @@ sharedRouter.post('/', authGuard, async (c) => {
   let success = false;
 
   while (attempts < maxAttempts && !success) {
-    id = generateId().slice(0, 8); // Short slug
+    id = generateId().replace(/-/g, '').slice(0, 16); // 64-bit entropy slug
     try {
       await db.prepare(
         'INSERT INTO shared_links (id, user_id, target_type, target_id, password_hash, expires_at, allow_downloads, allow_uploads, max_downloads, require_email, webhook_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -115,7 +132,7 @@ sharedRouter.post('/', authGuard, async (c) => {
         attempts++;
       } else {
         console.error('Error creating shared link:', e);
-        return c.json({ error: 'Failed to create shared link', details: e.message }, 500);
+        return c.json({ error: 'Failed to create shared link' }, 500);
       }
     }
   }
@@ -170,6 +187,11 @@ sharedRouter.put('/:id', authGuard, async (c) => {
     webhookUrl = existing.webhook_url,
     password
   } = body;
+
+  if (webhookUrl && webhookUrl !== existing.webhook_url) {
+    const webhookError = validateWebhookUrl(webhookUrl);
+    if (webhookError) return c.json({ error: webhookError }, 400);
+  }
   
   let passwordHash = existing.password_hash;
   
@@ -328,7 +350,7 @@ sharedRouter.post('/:id/verify', async (c) => {
     return c.json({ error: 'Invalid password' }, 401);
   }
   
-  const token = await sign({ id }, c.env.GOOGLE_CLIENT_SECRET, 'HS256');
+  const token = await sign({ id, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 }, c.env.JWT_SECRET, 'HS256');
   setCookie(c, `shared_session_${id}`, token, { path: '/', httpOnly: true, secure: true, sameSite: 'None', maxAge: 60 * 60 * 24 });
   return c.json({ success: true });
 });
@@ -375,10 +397,10 @@ sharedRouter.get('/:id/download', async (c) => {
   }
 
   if (link.targetType === 'file') {
-    const file = await db.prepare('SELECT * FROM files WHERE id = ?').bind(link.targetId).first();
+    const file = await db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ?').bind(link.targetId, link.userId).first();
     if (!file) return c.text('File not found', 404);
 
-    const driveAccount = await db.prepare('SELECT * FROM drive_accounts WHERE id = ?').bind(file.drive_account_id).first();
+    const driveAccount = await db.prepare('SELECT * FROM drive_accounts WHERE id = ? AND user_id = ?').bind(file.drive_account_id, link.userId).first();
     if (!driveAccount) return c.text('Drive account not found', 404);
 
     const driveService = new GoogleDriveService(
@@ -405,7 +427,7 @@ sharedRouter.get('/:id/download', async (c) => {
       }
     } catch (e: any) {
       console.error('Download error:', e);
-      return c.text(`Failed to download file: ${e.message}`, 502);
+      return c.text('Failed to download file', 502);
     }
     
     c.header('Content-Type', finalMimeType);

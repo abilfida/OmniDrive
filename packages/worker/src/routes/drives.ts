@@ -7,6 +7,7 @@ import { syncDriveAccount } from '../services/sync';
 import { mapDriveRow, mapDriveFolderRow, mapFileRow } from '../types';
 import { generateId } from '../lib/id';
 import type { BreadcrumbItem } from '../types';
+import { decryptOrPassthrough } from '../lib/crypto';
 
 export async function buildDriveBreadcrumb(db: D1Database, driveId: string, googleFolderId: string): Promise<BreadcrumbItem[]> {
   const path: BreadcrumbItem[] = [];
@@ -71,14 +72,15 @@ drivesRouter.get('/', async (c) => {
   const drives = results.map(mapDriveRow);
 
   const drivesWithQuota = await Promise.all(drives.map(async (drive) => {
-    const tokenJson = await c.env.KV.get(`tokens:${drive.id}`);
-    if (!tokenJson) return { ...drive, freeSpace: 0, usagePercent: 0 };
+    const encryptedTokens = await c.env.KV.get(`tokens:${drive.id}`);
+    if (!encryptedTokens) return { ...drive, freeSpace: 0, usagePercent: 0 };
+    const tokenJson = await decryptOrPassthrough(encryptedTokens, c.env.TOKEN_ENCRYPTION_KEY);
 
     try {
       // Use the robust GoogleDriveService which handles token caching & refreshing
       const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
       
-      // Ensure the old token format is available in the new oauth: prefix if needed
+      // Ensure available under oauth: prefix for GoogleDriveService
       await c.env.KV.put(`oauth:${drive.id}`, tokenJson);
       
       const quota = await driveService.getQuota(drive.id);
@@ -218,9 +220,10 @@ drivesRouter.post('/:driveId/folders/:googleFolderId/sync', async (c) => {
     });
   }
 
-  // Fetch tokens — support both key prefixes
-  const tokenJson = await c.env.KV.get(`tokens:${driveId}`) ?? await c.env.KV.get(`oauth:${driveId}`);
-  if (!tokenJson) return c.json({ error: 'No tokens for drive' }, 400);
+  // Fetch tokens
+  const encryptedTokens = await c.env.KV.get(`tokens:${driveId}`);
+  if (!encryptedTokens) return c.json({ error: 'No tokens for drive' }, 400);
+  const tokenJson = await decryptOrPassthrough(encryptedTokens, c.env.TOKEN_ENCRYPTION_KEY);
 
   // Ensure available under oauth: prefix for GoogleDriveService
   await c.env.KV.put(`oauth:${driveId}`, tokenJson);

@@ -9,8 +9,9 @@ export function corsMiddleware() {
       if (allowed.includes(origin)) {
         return origin;
       }
-      // Allow localhost in development
-      if (origin?.startsWith('http://localhost')) {
+      // Only allow localhost in development (when FRONTEND_URL is localhost)
+      const isDev = env.FRONTEND_URL?.includes('localhost');
+      if (isDev && origin && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
         return origin;
       }
       return '';

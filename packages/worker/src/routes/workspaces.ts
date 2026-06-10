@@ -69,6 +69,14 @@ workspacesRouter.post('/:id/members', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
+  // Prevent role escalation: can't assign role >= own role
+  const levels: Record<string, number> = { 'viewer': 1, 'auditor': 1, 'commenter': 2, 'editor': 3, 'manager': 4, 'owner': 5 };
+  const assignerLevel = levels[currentUserRole] || 0;
+  const targetLevel = levels[role] || 0;
+  if (targetLevel >= assignerLevel) {
+    return c.json({ error: 'Cannot assign a role equal to or higher than your own' }, 403);
+  }
+
   const targetUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
   if (!targetUser) {
     return c.json({ error: 'User not found' }, 404);

@@ -31,18 +31,34 @@ export class GoogleDriveError extends Error {
 }
 
 export class GoogleDriveService {
+  private encryptionKey?: string;
+
   constructor(
     private kv: KVNamespace,
     private clientId: string,
-    private clientSecret: string
-  ) {}
+    private clientSecret: string,
+    encryptionKey?: string
+  ) {
+    this.encryptionKey = encryptionKey;
+  }
 
   // ─── Token Management ───
 
   async getValidToken(driveAccountId: string): Promise<string> {
-    const tokensJson = await this.kv.get(`oauth:${driveAccountId}`);
-    if (!tokensJson) {
+    // Try tokens: prefix first (new), fallback to oauth: (legacy)
+    const raw = await this.kv.get(`tokens:${driveAccountId}`) ?? await this.kv.get(`oauth:${driveAccountId}`);
+    if (!raw) {
       throw new Error(`No tokens found for drive ${driveAccountId}`);
+    }
+
+    let tokensJson = raw;
+    if (this.encryptionKey) {
+      try {
+        const { decryptOrPassthrough } = await import('../lib/crypto');
+        tokensJson = await decryptOrPassthrough(raw, this.encryptionKey);
+      } catch {
+        // Fallback to raw if decrypt fails
+      }
     }
 
     const tokens: OAuthTokens = JSON.parse(tokensJson);
@@ -76,14 +92,19 @@ export class GoogleDriveService {
     const data: { access_token: string; expires_in: number } = await response.json();
 
     // Update KV with new access token (keep existing refresh token)
-    await this.kv.put(
-      `oauth:${driveAccountId}`,
-      JSON.stringify({
-        accessToken: data.access_token,
-        refreshToken,
-        expiresAt: Date.now() + data.expires_in * 1000,
-      } satisfies OAuthTokens)
-    );
+    const newTokens = JSON.stringify({
+      accessToken: data.access_token,
+      refreshToken,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    } satisfies OAuthTokens);
+
+    if (this.encryptionKey) {
+      const { encrypt } = await import('../lib/crypto');
+      const encrypted = await encrypt(newTokens, this.encryptionKey);
+      await this.kv.put(`tokens:${driveAccountId}`, encrypted);
+    } else {
+      await this.kv.put(`oauth:${driveAccountId}`, newTokens);
+    }
 
     return data.access_token;
   }
