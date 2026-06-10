@@ -40,6 +40,8 @@ export const api = {
   getInvitations: () => request<{ invitations: any[] }>('/api/admin/invitations'),
   createInvitation: (code: string, max_uses: number) => request<{ success: boolean, invitation: any }>('/api/admin/invitations', { method: 'POST', body: JSON.stringify({ code, max_uses }) }),
   deleteInvitation: (id: string) => request<{ success: boolean }>(`/api/admin/invitations/${id}`, { method: 'DELETE' }),
+  getAdminUsers: () => request<{ users: import('../types').User[] }>('/api/admin/users'),
+  adminCreateUser: (data: any) => request<{ success: boolean; user: import('../types').User }>('/api/admin/users', { method: 'POST', body: JSON.stringify(data) }),
 
   // Drives
   getDrives: () =>
