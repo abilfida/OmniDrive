@@ -5,14 +5,17 @@ WORKDIR /app
 
 # Copy root package.json and workspace definition
 COPY package.json package-lock.json* ./
-COPY tsconfig.base.json ./
 
-# Copy packages
-COPY packages/web ./packages/web
+# Copy only package.json files for workspaces to leverage Docker cache
+COPY packages/web/package.json ./packages/web/package.json
 COPY packages/worker/package.json ./packages/worker/package.json
 
 # Install dependencies
 RUN npm ci
+
+# Now copy the rest of the source code and configs
+COPY tsconfig.base.json ./
+COPY packages/web ./packages/web
 
 # Build web package
 RUN npm run build:web

@@ -4,14 +4,17 @@ WORKDIR /app
 
 # Copy root package.json and workspace definition
 COPY package.json package-lock.json* ./
-COPY tsconfig.base.json ./
 
-# Copy packages
-COPY packages/worker ./packages/worker
+# Copy only package.json files for workspaces to leverage Docker cache
+COPY packages/worker/package.json ./packages/worker/package.json
 COPY packages/web/package.json ./packages/web/package.json
 
 # Install dependencies
 RUN npm ci
+
+# Now copy the rest of the source code and configs
+COPY tsconfig.base.json ./
+COPY packages/worker ./packages/worker
 
 # Expose wrangler local port
 EXPOSE 8787
