@@ -259,21 +259,23 @@ export const AdminUsersPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1 hover:bg-gray-200 rounded text-gray-500">
-                              <MoreVertical size={16} />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white shadow-xl rounded-xl border border-gray-200 w-40">
-                            <DropdownMenuItem className="cursor-pointer" onSelect={() => handleToggleStatus(userItem.id, userItem.status)}>
-                              {userItem.status === 'blocked' ? 'Unblock User' : 'Block User'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onSelect={() => setUserToDelete(userItem.id)}>
-                              Delete User
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {userItem.id !== user?.id && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="p-1 hover:bg-gray-200 rounded text-gray-500">
+                                <MoreVertical size={16} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-white shadow-xl rounded-xl border border-gray-200 w-40">
+                              <DropdownMenuItem className="cursor-pointer" onSelect={() => handleToggleStatus(userItem.id, userItem.status)}>
+                                {userItem.status === 'blocked' ? 'Unblock User' : 'Block User'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50" onSelect={() => setUserToDelete(userItem.id)}>
+                                Delete User
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </td>
                     </tr>
                   ))}
