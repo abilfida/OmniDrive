@@ -27,6 +27,7 @@ jobs:
           echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
           echo "IMAGE_NAME_WEB=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-web" >> $GITHUB_ENV
           echo "IMAGE_NAME_WORKER=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-worker" >> $GITHUB_ENV
+          echo "IMAGE_NAME_UNIFIED=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-unified" >> $GITHUB_ENV
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
