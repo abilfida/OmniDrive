@@ -156,7 +156,7 @@ export const AdminUsersPage: React.FC = () => {
   }
 
   // Users Actions
-  const handleToggleStatus = (id: string, currentStatus: 'active' | 'blocked' | undefined) => {
+  const handleToggleStatus = (_id: string, _currentStatus: 'active' | 'blocked' | undefined) => {
     alert('Feature coming soon');
   };
 
