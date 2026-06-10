@@ -259,7 +259,7 @@ export const AdminUsersPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {userItem.id !== user?.id && (
+                        {userItem.id !== (user?.id || (user as any)?.userId) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button className="p-1 hover:bg-gray-200 rounded text-gray-500">
