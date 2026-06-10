@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 echo "Starting Wrangler Backend..."
 cd /app/packages/worker
@@ -10,4 +11,4 @@ echo "Waiting for Wrangler to initialize..."
 sleep 2
 
 echo "Starting Nginx Frontend..."
-nginx -g 'daemon off;'
+exec nginx -g 'daemon off;'
