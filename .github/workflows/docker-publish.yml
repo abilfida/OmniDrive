@@ -7,6 +7,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME_WEB: ${{ github.repository_owner }}/omnidrive-web
+  IMAGE_NAME_WORKER: ${{ github.repository_owner }}/omnidrive-worker
+  IMAGE_NAME_UNIFIED: ${{ github.repository_owner }}/omnidrive-unified
 
 jobs:
   build-and-push:
@@ -68,6 +71,22 @@ jobs:
           push: true
           tags: ${{ steps.meta-worker.outputs.tags }}
           labels: ${{ steps.meta-worker.outputs.labels }}
+
+      - name: Extract metadata (tags, labels) for Unified
+        id: meta-unified
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_UNIFIED }}
+          tags: type=semver,pattern={{version}}
+
+      - name: Build and push Unified image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.unified
+          push: true
+          tags: ${{ steps.meta-unified.outputs.tags }}
+          labels: ${{ steps.meta-unified.outputs.labels }}
 
       - name: Release docker-compose.yml
         uses: softprops/action-gh-release@v2
