@@ -4,17 +4,21 @@ import { AppError } from '../middleware/error-handler';
 export class AuthService {
   constructor(private env: Env) {}
 
-  async exchangeCodeForTokens(code: string, redirectUri: string): Promise<OAuthTokens> {
+  async exchangeCodeForTokens(code: string, redirectUri: string, codeVerifier?: string): Promise<OAuthTokens> {
+    const params = new URLSearchParams({
+      code,
+      client_id: this.env.GOOGLE_CLIENT_ID,
+      client_secret: this.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    });
+    if (codeVerifier) {
+      params.append('code_verifier', codeVerifier);
+    }
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: this.env.GOOGLE_CLIENT_ID,
-        client_secret: this.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
+      body: params,
     });
 
     if (!response.ok) {

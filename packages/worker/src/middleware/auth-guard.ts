@@ -3,6 +3,8 @@ import { getCookie } from 'hono/cookie';
 import type { AppContext, SessionData } from '../types/env';
 import { AppError } from './error-handler';
 
+const MAX_SESSION_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days absolute max
+
 export const authGuard = createMiddleware<AppContext>(async (c, next) => {
   const cookie = getCookie(c, 'omnidrive_sid');
   if (!cookie) {
@@ -15,6 +17,13 @@ export const authGuard = createMiddleware<AppContext>(async (c, next) => {
   }
 
   const session: SessionData = JSON.parse(sessionJson);
+
+  // Enforce absolute session lifetime
+  if (session.createdAt && Date.now() - session.createdAt > MAX_SESSION_AGE) {
+    await c.env.KV.delete(`session:${cookie}`);
+    throw new AppError(401, 'Session expired');
+  }
+
   c.set('userId', session.userId);
   c.set('session', session);
 
@@ -25,5 +34,3 @@ export const authGuard = createMiddleware<AppContext>(async (c, next) => {
 
   await next();
 });
-
-
