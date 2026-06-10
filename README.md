@@ -176,6 +176,8 @@ Or use the [Cloudflare Pages dashboard](https://dash.cloudflare.com/?to=/:accoun
 |----------|-------------|
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
+| `JWT_SECRET` | Dedicated JWT signing key for shared links (min 32 chars) |
+| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for encrypting OAuth tokens at rest (32 chars) |
 
 ### Worker Config (set in `wrangler.toml` `[vars]`)
 
