@@ -14,6 +14,9 @@ export function WorkspacesPage() {
   const [subfolders, setSubfolders] = useState<WorkspaceFolder[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [retentionTargetId, setRetentionTargetId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const addToast = useToastStore(state => state.addToast);
   const { clearSelection, toggleSelection } = useSelectionStore();
   const setIsInfoPanelOpen = useUIStore(s => s.setIsInfoPanelOpen);
@@ -27,13 +30,24 @@ export function WorkspacesPage() {
     }
   }, [addToast]);
 
-  const fetchContents = useCallback(async (folderId: string) => {
+  const fetchContents = useCallback(async (folderId: string, cursor?: string) => {
     try {
-      const res = await api.getFolderContents(folderId);
-      setFiles(res.files);
-      setSubfolders(res.subfolders);
+      if (cursor) setIsLoadingMore(true);
+      const res = await api.getFolderContents(folderId, cursor);
+      
+      if (cursor) {
+        setFiles(prev => [...prev, ...res.files]);
+      } else {
+        setFiles(res.files);
+        setSubfolders(res.subfolders);
+      }
+      
+      setNextCursor(res.pagination?.nextCursor || null);
+      setHasMore(res.pagination?.hasMore || false);
     } catch {
       addToast('error', 'Failed to load folder contents');
+    } finally {
+      setIsLoadingMore(false);
     }
   }, [addToast]);
 
@@ -148,6 +162,12 @@ export function WorkspacesPage() {
     }
   }, []);
 
+  const loadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore && nextCursor && activeFolderId) {
+      fetchContents(activeFolderId, nextCursor);
+    }
+  }, [isLoadingMore, hasMore, nextCursor, activeFolderId, fetchContents]);
+
   const fileTabProps = useMemo(() => ({
     files,
     subfolders,
@@ -161,7 +181,10 @@ export function WorkspacesPage() {
     isTargetShared,
     errorDrives,
     onViewInfo: handleViewInfo,
-    onSetRetentionPolicy: handleSetRetentionPolicy
+    onSetRetentionPolicy: handleSetRetentionPolicy,
+    loadMore,
+    hasMore,
+    isLoadingMore
   }), [
     files,
     subfolders,
@@ -174,7 +197,10 @@ export function WorkspacesPage() {
     isTargetShared,
     errorDrives,
     handleViewInfo,
-    handleSetRetentionPolicy
+    handleSetRetentionPolicy,
+    loadMore,
+    hasMore,
+    isLoadingMore
   ]);
 
   return (
