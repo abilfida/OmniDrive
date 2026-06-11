@@ -5,27 +5,55 @@ import { useDriveStore } from '../stores/driveStore';
 import { api } from '../lib/api';
 import { FileEntry, DriveAccount } from '../types';
 import { formatFileSize } from '../lib/utils';
+import { useToastStore } from '../stores/toastStore';
 
 interface MoveDriveModalProps {
-  file: FileEntry | null;
+  files: FileEntry[];
   onClose: () => void;
   onSuccess: () => void;
   onError: (error: any) => void;
 }
 
-export function MoveDriveModal({ file, onClose, onSuccess, onError }: MoveDriveModalProps) {
+export function MoveDriveModal({ files, onClose, onSuccess, onError }: MoveDriveModalProps) {
   const { drives } = useDriveStore();
+  const addToast = useToastStore((s) => s.addToast);
   const [isMoving, setIsMoving] = useState(false);
   const [movingToDriveId, setMovingToDriveId] = useState<string | null>(null);
 
-  const availableDrives = drives.filter(d => d.id !== file?.driveAccountId);
+  // Consider all drives that are not the source of EVERY file.
+  // Simplest is to just show all drives, but for UX, exclude if it's the exact same drive for the single file.
+  const availableDrives = files.length === 1 
+    ? drives.filter(d => d.id !== files[0].driveAccountId)
+    : drives;
 
   const handleMove = async (drive: DriveAccount) => {
-    if (!file) return;
+    if (files.length === 0) return;
     try {
       setIsMoving(true);
       setMovingToDriveId(drive.id);
-      await api.moveFileToDrive(file.id, drive.id);
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const file of files) {
+        if (file.driveAccountId === drive.id) {
+          // Skip if already in this drive
+          continue;
+        }
+        try {
+          await api.moveFileToDrive(file.id, drive.id);
+          successCount++;
+        } catch (e) {
+          failCount++;
+        }
+      }
+      
+      if (failCount === 0 && successCount > 0) {
+        addToast('success', `✅ Moved ${successCount} item(s) to ${drive.email}`);
+      } else if (failCount > 0) {
+        addToast('error', `⚠️ Moved ${successCount} item(s), ${failCount} failed`);
+      }
+      
       onSuccess();
     } catch (err) {
       onError(err);
@@ -36,12 +64,12 @@ export function MoveDriveModal({ file, onClose, onSuccess, onError }: MoveDriveM
   };
 
   return (
-    <Dialog open={!!file} onOpenChange={(open) => !open && !isMoving && onClose()}>
+    <Dialog open={files.length > 0} onOpenChange={(open) => !open && !isMoving && onClose()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Move to Another Drive</DialogTitle>
           <DialogDescription>
-            Select a destination drive to move "{file?.name}". This may take a moment depending on the file size.
+            Select a destination drive to move {files.length} item(s). This may take a moment depending on the file size.
           </DialogDescription>
         </DialogHeader>
 
