@@ -2,6 +2,11 @@ import type { DriveAccount } from '../types/index';
 import { mapDriveRow } from '../types/index';
 import { GoogleDriveService, type GDriveFile, type GDriveFolder } from './google-drive';
 import { generateId } from '../lib/id';
+import type { Env } from '../types/env';
+
+export async function syncDriveFolder(_env: Env, _driveId: string, _folderId: string, _userId: string): Promise<void> {
+  // implemented by another task
+}
 
 export async function syncDriveAccount(
   drive: DriveAccount,
@@ -224,8 +229,9 @@ export async function runScheduledSync(env: {
   KV: KVNamespace;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  TOKEN_ENCRYPTION_KEY: string;
 }): Promise<void> {
-  const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.TOKEN_ENCRYPTION_KEY);
 
   const rows = await env.DB.prepare("SELECT * FROM drive_accounts WHERE type = 'oauth'").all();
   const driveAccounts = (rows.results ?? []).map(mapDriveRow);
