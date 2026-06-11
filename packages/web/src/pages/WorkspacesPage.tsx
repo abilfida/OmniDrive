@@ -30,11 +30,13 @@ export function WorkspacesPage() {
     }
   }, [addToast]);
 
-  const fetchContents = useCallback(async (folderId: string, cursor?: string) => {
+  const fetchContents = useCallback(async (folderId: string, cursor?: string, isStale?: () => boolean) => {
     try {
       if (cursor) setIsLoadingMore(true);
       const res = await api.getFolderContents(folderId, cursor);
       
+      if (isStale?.()) return;
+
       if (cursor) {
         setFiles(prev => [...prev, ...res.files]);
       } else {
@@ -45,9 +47,12 @@ export function WorkspacesPage() {
       setNextCursor(res.pagination?.nextCursor || null);
       setHasMore(res.pagination?.hasMore || false);
     } catch {
+      if (isStale?.()) return;
       addToast('error', 'Failed to load folder contents');
     } finally {
-      setIsLoadingMore(false);
+      if (!isStale?.()) {
+        setIsLoadingMore(false);
+      }
     }
   }, [addToast]);
 
@@ -56,13 +61,15 @@ export function WorkspacesPage() {
   }, [fetchTree]);
 
   useEffect(() => {
+    let ignore = false;
     if (activeFolderId) {
-      fetchContents(activeFolderId);
+      fetchContents(activeFolderId, undefined, () => ignore);
     } else {
       setFiles([]);
       setSubfolders([]);
     }
     clearSelection();
+    return () => { ignore = true; };
   }, [activeFolderId, clearSelection, fetchContents]);
 
   const handleCreateFolder = async (parentId?: string | null) => {
@@ -150,11 +157,11 @@ export function WorkspacesPage() {
     try {
       await api.moveFile(id, null);
       addToast('success', 'Removed');
-      if (activeFolderId) fetchContents(activeFolderId);
+      setFiles(prev => prev.filter(f => f.id !== id));
     } catch {
       addToast('error', 'Failed');
     }
-  }, [activeFolderId, fetchContents, addToast]);
+  }, [addToast]);
 
   const handleSetRetentionPolicy = useCallback((id: string, type: 'file' | 'folder') => {
     if (type === 'folder') {
