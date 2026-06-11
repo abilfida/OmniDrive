@@ -11,7 +11,7 @@ import {
   ContextMenuSeparator,
 } from '../ui/context-menu';
 import { useUIStore } from '../../stores/useUIStore';
-import { useSelectionStore, type SelectedItem } from '../../stores/useSelectionStore';
+import { useSelectionStore, type SelectedItem, isSameItem } from '../../stores/useSelectionStore';
 
 function isGoogleNative(mimeType: string | null): boolean {
   return !!mimeType && mimeType.startsWith('application/vnd.google-apps.');
@@ -215,10 +215,38 @@ export const FileGrid: React.FC<FileGridProps> = ({
 }) => {
   const storeViewMode = useUIStore((s) => s.viewMode);
   const viewMode = viewModeProp ?? storeViewMode;
-  const { selectedItems, toggleSelection, selectAll, clearSelection } = useSelectionStore();
+  const [lastSelected, setLastSelected] = React.useState<SelectedItem | null>(null);
+  const { selectedItems, toggleSelection, selectMultiple, selectAll, clearSelection } = useSelectionStore();
   const hasSelection = selectedItems.length > 0;
   const selectedKeys = new Set(selectedItems.map(i => i.item.id || ('googleFolderId' in i.item ? i.item.googleFolderId : undefined)));
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleItemClick = (e: React.MouseEvent, item: SelectedItem) => {
+    e.stopPropagation();
+    if (e.shiftKey && lastSelected) {
+      // Prevent text selection
+      document.getSelection()?.removeAllRanges();
+      
+      const allItems: SelectedItem[] = [
+        ...subfolders.map(f => ({ type: 'folder' as const, item: f })),
+        ...files.map(f => ({ type: 'file' as const, item: f }))
+      ];
+      const startIndex = allItems.findIndex(i => isSameItem(i, lastSelected));
+      const endIndex = allItems.findIndex(i => isSameItem(i, item));
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        const start = Math.min(startIndex, endIndex);
+        const end = Math.max(startIndex, endIndex);
+        selectMultiple(allItems.slice(start, end + 1));
+      }
+    } else if (e.metaKey || e.ctrlKey || hasSelection) {
+      toggleSelection(item);
+      setLastSelected(item);
+    } else {
+      toggleSelection(item);
+      setLastSelected(item);
+    }
+  };
 
   if (files.length === 0 && subfolders.length === 0) {
     return (
@@ -276,10 +304,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
             <ContextMenu key={key}>
               <ContextMenuTrigger>
                 <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSelection({ type: 'folder', item: folder });
-                  }}
+                  onClick={(e) => handleItemClick(e, { type: 'folder', item: folder })}
                   onDoubleClick={() => {
                     if (isTrashView) return;
                     if (isVirtual) {
@@ -314,8 +339,11 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       type="checkbox" 
                       className={`w-4 h-4 cursor-pointer flex-shrink-0 ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
                       checked={isSelected}
-                      onChange={() => toggleSelection({ type: 'folder', item: folder })}
-                      onClick={(e) => e.stopPropagation()}
+                      readOnly
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemClick(e, { type: 'folder', item: folder });
+                      }}
                     />
                     <Folder size={20} className="text-blue-500 flex-shrink-0" />
                   </div>
@@ -362,10 +390,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
             <ContextMenu key={file.id}>
               <ContextMenuTrigger>
                 <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSelection({ type: 'file', item: file });
-                  }}
+                  onClick={(e) => handleItemClick(e, { type: 'file', item: file })}
                   onDoubleClick={() => {
                     if (isTrashView) {
                       return;
@@ -396,8 +421,11 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       type="checkbox" 
                       className={`w-4 h-4 cursor-pointer flex-shrink-0 ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
                       checked={isSelected}
-                      onChange={() => toggleSelection({ type: 'file', item: file })}
-                      onClick={(e) => e.stopPropagation()}
+                      readOnly
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemClick(e, { type: 'file', item: file });
+                      }}
                     />
                     <span className="text-xl flex-shrink-0">{getFileIcon(file.mimeType)}</span>
                   </div>
@@ -462,10 +490,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
           <ContextMenu key={key}>
             <ContextMenuTrigger>
               <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSelection({ type: 'folder', item: folder });
-                }}
+                onClick={(e) => handleItemClick(e, { type: 'folder', item: folder })}
                 onDoubleClick={() => {
                   if (isTrashView) return;
                     if (isVirtual) {
@@ -499,8 +524,11 @@ export const FileGrid: React.FC<FileGridProps> = ({
                   type="checkbox" 
                   className={`absolute top-2 left-2 z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
                   checked={isSelected}
-                  onChange={() => toggleSelection({ type: 'folder', item: folder })}
-                  onClick={(e) => e.stopPropagation()}
+                  readOnly
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleItemClick(e, { type: 'folder', item: folder });
+                  }}
                 />
                 <Folder size={20} className="text-blue-500 flex-shrink-0 ml-5" />
                 <div className="flex-1 truncate text-sm font-medium text-gray-800">
@@ -543,10 +571,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
           <ContextMenu key={file.id}>
             <ContextMenuTrigger>
               <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSelection({ type: 'file', item: file });
-                }}
+                onClick={(e) => handleItemClick(e, { type: 'file', item: file })}
                 onDoubleClick={() => {
                   if (isTrashView) {
                     return;
@@ -576,8 +601,11 @@ export const FileGrid: React.FC<FileGridProps> = ({
                   type="checkbox" 
                   className={`absolute top-2 left-2 z-10 w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
                   checked={isSelected}
-                  onChange={() => toggleSelection({ type: 'file', item: file })}
-                  onClick={(e) => e.stopPropagation()}
+                  readOnly
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleItemClick(e, { type: 'file', item: file });
+                  }}
                 />
                 <div className="flex justify-between items-start">
                   <div className="text-3xl ml-5">{getFileIcon(file.mimeType)}</div>
