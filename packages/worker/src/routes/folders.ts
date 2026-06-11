@@ -48,7 +48,8 @@ foldersRouter.get('/:id?', async (c) => {
   const db = c.env.DB;
 
   const cursorParam = c.req.query('cursor');
-  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 100);
+  const parsed = parseInt(c.req.query('limit') || '50', 10);
+  const limit = isNaN(parsed) || parsed < 1 ? 50 : Math.min(parsed, 100);
   const cursor = cursorParam ? decodeCursor<{ name: string, id: string }>(cursorParam) : null;
   let hasMore = false;
   let nextCursor: string | null = null;
@@ -89,9 +90,9 @@ foldersRouter.get('/:id?', async (c) => {
       `;
       const binds: any[] = [folderId];
 
-      if (cursor?.name && cursor?.id) {
-        sql += ` AND (f.name > ? OR (f.name = ? AND f.id > ?))`;
-        binds.push(cursor.name, cursor.name, cursor.id);
+      if (cursor && cursor.name !== undefined && cursor.id !== undefined) {
+        sql += ` AND (f.name, f.id) > (?, ?)`;
+        binds.push(cursor.name, cursor.id);
       }
 
       sql += ` ORDER BY f.name ASC, f.id ASC LIMIT ?`;
@@ -127,9 +128,9 @@ foldersRouter.get('/:id?', async (c) => {
       `;
       const binds: any[] = [folderId];
 
-      if (cursor?.name && cursor?.id) {
-        sql += ` AND (f.name > ? OR (f.name = ? AND f.id > ?))`;
-        binds.push(cursor.name, cursor.name, cursor.id);
+      if (cursor && cursor.name !== undefined && cursor.id !== undefined) {
+        sql += ` AND (f.name, f.id) > (?, ?)`;
+        binds.push(cursor.name, cursor.id);
       }
 
       sql += ` ORDER BY f.name ASC, f.id ASC LIMIT ?`;
