@@ -54,7 +54,7 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
         return;
       } else {
         // Fetch specific sub-folder for a specific drive
-        const data = await api.syncDriveFolder(driveIdParam, folderId);
+        const data = await api.getFolderContents(folderId, undefined, undefined, driveIdParam);
         if (abortSignal?.aborted) return;
         setSubfolders(data.subfolders);
         setFiles(data.files);

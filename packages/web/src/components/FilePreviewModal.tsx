@@ -46,6 +46,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
               <img
                 src={file.thumbnailUrl.replace('=s220', '=s600')}
                 alt={file.name}
+                loading="lazy"
                 className="max-w-full max-h-[400px] object-contain rounded-lg shadow-sm"
               />
             </div>
@@ -56,6 +57,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
               <img 
                 src={file.thumbnailUrl} 
                 alt={file.name} 
+                loading="lazy"
                 className="max-h-[200px] object-contain shadow-sm rounded bg-white" 
               />
             </div>

@@ -61,10 +61,11 @@ export const api = {
 
   // Folders
   getRootContents: () => request<import('../types').FolderContents>('/api/folders/'),
-  getFolderContents: (id: string, cursor?: string, limit?: number) => {
+  getFolderContents: (id: string, cursor?: string, limit?: number, driveId?: string) => {
     const params = new URLSearchParams();
     if (cursor) params.set('cursor', cursor);
     if (limit) params.set('limit', limit.toString());
+    if (driveId) params.set('driveId', driveId);
     const query = params.toString() ? `?${params.toString()}` : '';
     return request<import('../types').FolderContents>(`/api/folders/${id}${query}`);
   },
@@ -90,6 +91,7 @@ export const api = {
     request<{ success: boolean }>(`/api/folders/${id}/sync`, { method: 'POST' }),
 
   // Files
+  getFile: (id: string) => request<import('../types').FileEntry>(`/api/files/${id}`),
   searchFiles: (query: string) =>
     request<{ files: import('../types').FileEntry[]; query: string }>(`/api/files/search?q=${encodeURIComponent(query)}`),
   initiateUpload: (data: { name: string; mimeType: string; size: number; driveAccountId?: string; workspaceFolderId?: string }) =>
