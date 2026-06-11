@@ -31,7 +31,7 @@ export function FilesPage() {
   const { addToast } = useToastStore();
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
   const [shareTarget, setShareTarget] = useState<{ id: string, type: 'file' | 'folder' } | null>(null);
-  const [moveFileTarget, setMoveFileTarget] = useState<FileEntry | null>(null);
+  const [moveDriveFiles, setMoveDriveFiles] = useState<FileEntry[]>([]);
   const [workspaceTarget, setWorkspaceTarget] = useState<FileEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const { viewMode, setViewMode, isInfoPanelOpen, toggleInfoPanel, setIsInfoPanelOpen } = useUIStore();
@@ -104,6 +104,10 @@ export function FilesPage() {
           <BulkActionBar 
             onActionComplete={() => refresh()} 
             onWorkspaceRequested={() => setWorkspaceTarget(selectedItems[0].item as FileEntry)}
+            onMoveDriveRequested={() => {
+              const files = selectedItems.filter(i => i.type === 'file').map(i => i.item as FileEntry);
+              setMoveDriveFiles(files);
+            }}
           />
         ) : (
           <div className="flex items-center justify-between mb-6 flex-wrap gap-4 px-4 pt-4">
@@ -193,7 +197,7 @@ export function FilesPage() {
               onShare={(id, type) => setShareTarget({ id, type })}
               onRenameFile={handleRenameFile}
               onDeleteFile={handleDeleteFile}
-              onMoveDrive={setMoveFileTarget}
+              onMoveDrive={(file) => setMoveDriveFiles([file])}
               onAddToWorkspace={setWorkspaceTarget}
               onViewInfo={handleViewInfo}
               isTargetShared={isTargetShared}
@@ -212,16 +216,20 @@ export function FilesPage() {
             onClose={() => setShareTarget(null)}
           />
         )}
-        {moveFileTarget && (
+        {moveDriveFiles.length > 0 && (
           <MoveDriveModal
-            file={moveFileTarget}
-            onClose={() => setMoveFileTarget(null)}
+            files={moveDriveFiles}
+            onClose={() => setMoveDriveFiles([])}
             onSuccess={() => {
-              setMoveFileTarget(null);
+              setMoveDriveFiles([]);
+              clearSelection();
               refresh();
-              addToast('success', 'File moved successfully');
             }}
-            onError={(msg) => addToast('error', msg)}
+            onError={(err) => {
+              console.error(err);
+              addToast('error', 'Failed to move file(s)');
+              setMoveDriveFiles([]);
+            }}
           />
         )}
         {workspaceTarget && (

@@ -22,7 +22,7 @@ export function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   
   const [shareTarget, setShareTarget] = useState<{ id: string, type: 'file' | 'folder' } | null>(null);
-  const [moveFileTarget, setMoveFileTarget] = useState<FileEntry | null>(null);
+  const [moveDriveFiles, setMoveDriveFiles] = useState<FileEntry[]>([]);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
 
   const fetchResults = useCallback(async (q: string, signal?: AbortSignal) => {
@@ -81,7 +81,7 @@ export function SearchPage() {
             subfolders={[]}
             getDriveInfo={getDriveInfo}
             onShare={(id, type) => setShareTarget({ id, type })}
-            onMoveDrive={setMoveFileTarget}
+            onMoveDrive={(file) => setMoveDriveFiles([file])}
             onPreviewFile={setPreviewFile}
             isTargetShared={isTargetShared}
             viewMode="list"
@@ -101,12 +101,12 @@ export function SearchPage() {
         />
       )}
 
-      {moveFileTarget && (
+      {moveDriveFiles.length > 0 && (
         <MoveDriveModal
-          file={moveFileTarget}
-          onClose={() => setMoveFileTarget(null)}
+          files={moveDriveFiles}
+          onClose={() => setMoveDriveFiles([])}
           onSuccess={() => {
-            setMoveFileTarget(null);
+            setMoveDriveFiles([]);
             fetchResults(query);
             addToast('success', 'File moved successfully');
           }}

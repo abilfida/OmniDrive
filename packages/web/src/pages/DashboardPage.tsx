@@ -17,7 +17,7 @@ export function DashboardPage() {
   const [recentFiles, setRecentFiles] = useState<FileEntry[]>([]);
   const [recentFolders, setRecentFolders] = useState<any[]>([]);
   const [shareTarget, setShareTarget] = useState<{ id: string, type: 'file' | 'folder' } | null>(null);
-  const [moveFileTarget, setMoveFileTarget] = useState<FileEntry | null>(null);
+  const [moveDriveFiles, setMoveDriveFiles] = useState<FileEntry[]>([]);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
   const { addToast } = useToastStore();
   
@@ -124,7 +124,7 @@ export function DashboardPage() {
                 return { drive: drives[index], index };
               }}
               onShare={(id, type) => setShareTarget({ id, type })}
-              onMoveDrive={setMoveFileTarget}
+              onMoveDrive={(file) => setMoveDriveFiles([file])}
               onPreviewFile={setPreviewFile}
               isTargetShared={isTargetShared}
               viewMode="list"
@@ -147,12 +147,12 @@ export function DashboardPage() {
         />
       )}
 
-      {moveFileTarget && (
+      {moveDriveFiles.length > 0 && (
         <MoveDriveModal
-          file={moveFileTarget}
-          onClose={() => setMoveFileTarget(null)}
+          files={moveDriveFiles}
+          onClose={() => setMoveDriveFiles([])}
           onSuccess={() => {
-            setMoveFileTarget(null);
+            setMoveDriveFiles([]);
             refreshRecent();
             addToast('success', 'File moved successfully');
           }}
