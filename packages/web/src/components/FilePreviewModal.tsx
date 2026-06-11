@@ -8,9 +8,12 @@ interface FilePreviewModalProps {
   onClose: () => void;
 }
 
+import { useState } from 'react';
+
 export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
   const isImage = file.mimeType?.startsWith('image/');
   const isGoogleDoc = file.mimeType?.startsWith('application/vnd.google-apps.');
+  const [imageError, setImageError] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -43,24 +46,40 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
         <div className="p-6 overflow-y-auto">
           {/* Preview */}
           {isImage && file.thumbnailUrl && (
-            <div className="mb-6 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 flex justify-center items-center p-2">
-              <img
-                src={file.thumbnailUrl.replace('=s220', '=s600')}
-                alt={file.name}
-                loading="lazy"
-                className="max-w-full max-h-[400px] object-contain rounded-lg shadow-sm"
-              />
+            <div className="mb-6 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 flex justify-center items-center p-2 min-h-[200px]">
+              {!imageError ? (
+                <img
+                  src={typeof file.thumbnailUrl === 'string' ? file.thumbnailUrl.replace('=s220', '=s600') : file.thumbnailUrl}
+                  alt={file.name}
+                  loading="lazy"
+                  className="max-w-full max-h-[400px] object-contain rounded-lg shadow-sm"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-gray-400">
+                  <FileIcon mimeType={file.mimeType} className="w-16 h-16 mb-2" />
+                  <span className="text-sm">Preview unavailable</span>
+                </div>
+              )}
             </div>
           )}
 
           {!isImage && file.thumbnailUrl && (
-            <div className="mb-6 flex justify-center p-8 bg-gray-50 border border-gray-200 rounded-xl">
-              <img 
-                src={file.thumbnailUrl} 
-                alt={file.name} 
-                loading="lazy"
-                className="max-h-[200px] object-contain shadow-sm rounded bg-white" 
-              />
+            <div className="mb-6 flex justify-center p-8 bg-gray-50 border border-gray-200 rounded-xl min-h-[200px]">
+              {!imageError ? (
+                <img 
+                  src={file.thumbnailUrl} 
+                  alt={file.name} 
+                  loading="lazy"
+                  className="max-h-[200px] object-contain shadow-sm rounded bg-white" 
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-gray-400">
+                  <FileIcon mimeType={file.mimeType} className="w-16 h-16 mb-2" />
+                  <span className="text-sm">Preview unavailable</span>
+                </div>
+              )}
             </div>
           )}
 
