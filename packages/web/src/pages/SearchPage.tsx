@@ -108,9 +108,12 @@ export function SearchPage() {
           onSuccess={() => {
             setMoveDriveFiles([]);
             fetchResults(query);
-            addToast('success', 'File moved successfully');
           }}
-          onError={(msg) => addToast('error', msg)}
+          onError={(msg) => {
+            console.error('Error moving file(s):', msg);
+            addToast('error', 'Failed to move file(s)');
+            setMoveDriveFiles([]);
+          }}
         />
       )}
 

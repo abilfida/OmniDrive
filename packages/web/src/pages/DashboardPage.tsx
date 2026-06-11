@@ -154,9 +154,12 @@ export function DashboardPage() {
           onSuccess={() => {
             setMoveDriveFiles([]);
             refreshRecent();
-            addToast('success', 'File moved successfully');
           }}
-          onError={(msg) => addToast('error', msg)}
+          onError={(msg) => {
+            console.error('Error moving file(s):', msg);
+            addToast('error', 'Failed to move file(s)');
+            setMoveDriveFiles([]);
+          }}
         />
       )}
 
