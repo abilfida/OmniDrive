@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useToastStore } from '../../stores/toastStore';
 import { api } from '../../lib/api';
-import { X, Trash2, Folder, Star } from 'lucide-react';
+import { X, Trash2, Folder, Star, HardDrive } from 'lucide-react';
 
 export interface BulkActionBarProps {
   onActionComplete: () => void;
   onMoveRequested?: () => void;
   onWorkspaceRequested?: () => void;
+  onMoveDriveRequested?: () => void;
 }
 
-export const BulkActionBar: React.FC<BulkActionBarProps> = ({ onActionComplete, onMoveRequested, onWorkspaceRequested }) => {
+export const BulkActionBar: React.FC<BulkActionBarProps> = ({ onActionComplete, onMoveRequested, onWorkspaceRequested, onMoveDriveRequested }) => {
   const { selectedItems, clearSelection } = useSelectionStore();
   const addToast = useToastStore((s) => s.addToast);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -52,27 +53,35 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({ onActionComplete, 
   };
 
   return (
-    <div className="flex items-center justify-between bg-blue-600 text-white rounded-lg shadow-md px-4 py-3 mb-6 w-full">
-      <div className="flex items-center gap-4">
-        <button onClick={clearSelection} disabled={isProcessing} className="p-1 hover:bg-blue-700 rounded-full transition-colors">
-          <X size={20} />
+    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between bg-white/80 backdrop-blur-md border border-gray-200 text-gray-800 rounded-full shadow-2xl px-6 py-3 min-w-[500px]">
+      <div className="flex items-center gap-4 border-r border-gray-200 pr-4">
+        <button onClick={clearSelection} disabled={isProcessing} className="p-1.5 hover:bg-gray-100 text-gray-500 rounded-full transition-colors">
+          <X size={18} />
         </button>
-        <span className="font-medium text-sm">{selectedItems.length} item(s) selected</span>
+        <span className="font-medium text-sm text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full">{selectedItems.length} selected</span>
       </div>
-      <div className="flex items-center gap-2">
-        <button onClick={handleDelete} disabled={isProcessing} className="flex items-center gap-2 px-3 py-1.5 hover:bg-blue-700 rounded-md transition-colors text-sm font-medium" title="Delete selected items">
+      <div className="flex items-center gap-2 pl-2">
+        <button onClick={handleDelete} disabled={isProcessing} className="flex items-center gap-2 px-3 py-1.5 hover:bg-red-50 text-gray-600 hover:text-red-600 rounded-full transition-colors text-sm font-medium" title="Delete selected items">
           <Trash2 size={16} /> Delete
         </button>
-        <button onClick={onMoveRequested} disabled={isProcessing} className="flex items-center gap-2 px-3 py-1.5 hover:bg-blue-700 rounded-md transition-colors text-sm font-medium" title="Move selected items">
+        <button onClick={onMoveRequested} disabled={isProcessing} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-gray-600 rounded-full transition-colors text-sm font-medium" title="Move selected items">
           <Folder size={16} /> Move
+        </button>
+        <button 
+          onClick={onMoveDriveRequested} 
+          disabled={isProcessing || !allFiles} 
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors text-sm font-medium ${!allFiles ? 'opacity-50 cursor-not-allowed text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`} 
+          title={!allFiles ? 'Can only move files to another drive' : 'Move to another drive'}
+        >
+          <HardDrive size={16} /> Move Drive
         </button>
         <button 
           onClick={onWorkspaceRequested} 
           disabled={isProcessing || !allFiles} 
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${!allFiles ? 'opacity-50 cursor-not-allowed bg-blue-800' : 'hover:bg-blue-700'}`} 
-          title={!allFiles ? 'Can only add to Workspace if all selected items are files' : 'Add to Workspace'}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors text-sm font-medium ${!allFiles ? 'opacity-50 cursor-not-allowed text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`} 
+          title={!allFiles ? 'Can only add files to Workspace' : 'Add to Workspace'}
         >
-          <Star size={16} /> Add to Workspace
+          <Star size={16} /> Workspace
         </button>
       </div>
     </div>
