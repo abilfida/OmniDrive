@@ -61,8 +61,11 @@ export const api = {
 
   // Folders
   getRootContents: () => request<import('../types').FolderContents>('/api/folders/'),
-  getFolderContents: (id: string, cursor?: string) => {
-    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  getFolderContents: (id: string, cursor?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : '';
     return request<import('../types').FolderContents>(`/api/folders/${id}${query}`);
   },
   createFolder: (name: string, parentId?: string, icon?: string, color?: string) =>
