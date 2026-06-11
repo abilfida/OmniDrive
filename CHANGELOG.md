@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-06-11
+
+### Added
+
+- **Performance & Load Optimization:**
+  - Implemented keyset pagination (cursor-based) for folders API
+  - Added infinite scroll fetching logic in workspace page
+  - Implemented stale-while-revalidate caching for folders
+  - Added hover prefetch and caching endpoint integration in `useMergedDrive`
+- **User Management Refactoring:**
+  - Updated backend auth and admin routes
+  - Refactored `AdminUsersPage` and removed deprecated components
+  - Hid current user actions in `AdminUsersPage` for safety
+  - Updated sidebar and login page designs
+- **Sync Tracking & Info Panel:**
+  - Added sync tracking columns to the database/types
+  - Added manual sync button and "last synced" info to the InfoPanel
+
+### Fixed
+
+- Resolved workspace race conditions and preserved infinite scroll on deletion
+- Refactored `getFolderContents` and added limit support
+- Addressed various TypeScript type errors in `useMergedDrive` and `InfoPanel`
+- Reverted `getFolderContents` for native drive folders to `getDriveFolderContents`
+- Enforced hiding of current user actions using username fallback in `AdminUsersPage`
+- Correctly checked current user id in `AdminUsersPage`
+- Removed unused `useAuthStore` in SettingsPage
+
 ## [0.4.0] - 2026-06-10
 
 ### Security
