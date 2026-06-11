@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-06-12
+
+### Added
+
+- **File Selection & Bulk Actions:**
+  - Added shift-click range selection and improved hit areas in the File Grid
+  - Connected bulk "Move Drive" functionality to FilesPage, SearchPage, and DashboardPage
+  - Upgraded `MoveDriveModal` to robustly handle bulk file operations
+  - Refactored `BulkActionBar` to a new floating pill design
+  - Added `selectMultiple` support to the selection store
+
+### Fixed
+
+- **Stability & Error Handling:**
+  - Handled preview image error to prevent application crashes
+  - Resolved double toast notifications and inconsistent error logic in `MoveDriveModal`
+  - Corrected `MoveDriveModal` success logic to properly handle "all-skipped" edge cases
+  - Fixed an issue where selection mode wouldn't automatically close upon location change
+  - Fixed redundant logic in `handleItemClick` during file selection
+  - Removed stray closing div causing build errors in `FilesPage`
+  - Fixed broken and orphaned tests in `InviteUserModal` and `WorkspaceTabs` to ensure test suite integrity
+
+### Changed (UI)
+
+- **Aesthetics & Usability:**
+  - Improved file and folder icons for a more polished and enterprise look
+  - Increased spacing between icons and file names for better readability
+  - Ensured the navigation toolbar remains visible during active file selection
+
 ## [0.5.0] - 2026-06-11
 
 ### Added
