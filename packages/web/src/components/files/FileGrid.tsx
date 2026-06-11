@@ -239,9 +239,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
         const end = Math.max(startIndex, endIndex);
         selectMultiple(allItems.slice(start, end + 1));
       }
-    } else if (e.metaKey || e.ctrlKey || hasSelection) {
-      toggleSelection(item);
-      setLastSelected(item);
     } else {
       toggleSelection(item);
       setLastSelected(item);
