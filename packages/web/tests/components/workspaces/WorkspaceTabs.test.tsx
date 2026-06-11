@@ -16,7 +16,7 @@ describe('Workspace Tab Components', () => {
   });
 
   it('renders Settings tab Storage & Quota section', () => {
-    render(<WorkspaceSettingsTab />);
+    render(<WorkspaceSettingsTab workspaceId="test-workspace-id" />);
     expect(screen.getByText('Storage & Quota')).toBeDefined();
   });
 
