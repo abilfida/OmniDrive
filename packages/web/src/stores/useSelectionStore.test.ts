@@ -46,6 +46,18 @@ describe('useSelectionStore', () => {
   });
 
   describe('store functions', () => {
+    it('should select multiple items', () => {
+      const file1 = { type: 'file', item: { id: '1' } as any } as const;
+      const file2 = { type: 'file', item: { id: '2' } as any } as const;
+      
+      useSelectionStore.getState().selectMultiple([file1, file2]);
+      expect(useSelectionStore.getState().selectedItems).toEqual([file1, file2]);
+      
+      // Should not duplicate existing items
+      useSelectionStore.getState().selectMultiple([file1]);
+      expect(useSelectionStore.getState().selectedItems).toEqual([file1, file2]);
+    });
+
     it('should toggle file selection correctly', () => {
       const dummyFile = { id: '1', name: 'test.txt' } as FileEntry;
       

@@ -8,6 +8,7 @@ export type SelectedItem =
 interface SelectionState {
   selectedItems: SelectedItem[];
   toggleSelection: (item: SelectedItem) => void;
+  selectMultiple: (items: SelectedItem[]) => void;
   selectAll: (items: SelectedItem[]) => void;
   clearSelection: () => void;
 }
@@ -40,6 +41,10 @@ export const useSelectionStore = create<SelectionState>((set) => ({
       return { selectedItems: state.selectedItems.filter(i => !isSameItem(i, item)) };
     }
     return { selectedItems: [...state.selectedItems, item] };
+  }),
+  selectMultiple: (items) => set((state) => {
+    const newItems = items.filter(item => !state.selectedItems.some(i => isSameItem(i, item)));
+    return { selectedItems: [...state.selectedItems, ...newItems] };
   }),
   selectAll: (items) => set({ selectedItems: items }),
   clearSelection: () => set({ selectedItems: [] }),
