@@ -8,10 +8,25 @@ import { syncDriveAccount } from '../services/sync';
 import { GoogleDriveService } from '../services/google-drive';
 import { mapDriveRow } from '../types/index';
 import { encodeCursor, decodeCursor } from '../lib/cursor';
+import { syncDriveFolder } from '../services/sync';
 
 export const foldersRouter = new Hono<AppContext>({ strict: false });
 
 foldersRouter.use('*', authGuard);
+
+async function performBackgroundSync(env: any, folderId: string, driveId: string | null, userId: string) {
+  const db = env.DB;
+  try {
+    await db.prepare("UPDATE workspace_folders SET sync_status = 'syncing' WHERE id = ?").bind(folderId).run();
+    if (driveId) {
+      await syncDriveFolder(env, driveId, folderId, userId);
+    }
+    await db.prepare("UPDATE workspace_folders SET sync_status = 'idle', last_synced_at = datetime('now') WHERE id = ?").bind(folderId).run();
+  } catch (err) {
+    await db.prepare("UPDATE workspace_folders SET sync_status = 'error' WHERE id = ?").bind(folderId).run();
+  }
+}
+
 
 foldersRouter.get('/tree', async (c) => {
   const userId = c.get('userId');
@@ -152,6 +167,25 @@ foldersRouter.get('/:id?', async (c) => {
       breadcrumb = [{ id: null, name: 'Home' }, { id: folder.workspace_id as string, name: folder.ws_name as string }, { id: folder.id as string, name: folder.name as string }];
     }
   }
+
+  if (currentFolder && currentFolder.id !== currentFolder.workspaceId) {
+    const ws = await db.prepare('SELECT sync_ttl_minutes FROM workspaces WHERE id = ?').bind(currentFolder.workspaceId).first<{sync_ttl_minutes: number}>();
+    const ttlMinutes = ws?.sync_ttl_minutes || 5;
+    
+    let isExpired = true;
+    if (currentFolder.lastSyncedAt) {
+      const lastSynced = new Date(currentFolder.lastSyncedAt).getTime();
+      const now = Date.now();
+      isExpired = (now - lastSynced) > (ttlMinutes * 60 * 1000);
+    }
+    
+    const driveId = c.req.query('driveId') || null;
+    
+    if (isExpired && currentFolder.syncStatus !== 'syncing') {
+      c.executionCtx.waitUntil(performBackgroundSync(c.env, currentFolder.id, driveId, userId));
+    }
+  }
+
 
   return c.json({ folder: currentFolder, subfolders, files, breadcrumb, pagination: { nextCursor, hasMore } });
 });
