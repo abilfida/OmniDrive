@@ -15,6 +15,7 @@ import type { FileEntry } from '../types';
 export function DashboardPage() {
   const { drives, aggregate, isLoading, fetchDrives } = useDriveStore();
   const [recentFiles, setRecentFiles] = useState<FileEntry[]>([]);
+  const [recentFolders, setRecentFolders] = useState<any[]>([]);
   const [shareTarget, setShareTarget] = useState<{ id: string, type: 'file' | 'folder' } | null>(null);
   const [moveFileTarget, setMoveFileTarget] = useState<FileEntry | null>(null);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
@@ -23,7 +24,10 @@ export function DashboardPage() {
   const { fetchSharedLinks, isTargetShared } = useSharedStore();
 
   const refreshRecent = useCallback(() => {
-    api.getRecentFiles().then((data) => setRecentFiles(data.files.slice(0, 12))).catch(() => {});
+    api.getRecentFiles().then((data) => {
+      setRecentFiles(data.files.slice(0, 12));
+      setRecentFolders(data.folders ? data.folders.slice(0, 12) : []);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -102,17 +106,17 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Recent Files */}
-      {recentFiles.length > 0 && (
+      {/* Recent */}
+      {(recentFiles.length > 0 || recentFolders.length > 0) && (
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Clock size={16} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Recent Files</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Recent</h2>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <FileGrid
               files={recentFiles}
-              subfolders={[]}
+              subfolders={recentFolders}
               getDriveInfo={(driveAccountId) => {
                 if (!driveAccountId) return { drive: null, index: 0 };
                 const index = drives.findIndex((d) => d.id === driveAccountId);

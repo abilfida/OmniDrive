@@ -78,7 +78,7 @@ drivesRouter.get('/', async (c) => {
 
     try {
       // Use the robust GoogleDriveService which handles token caching & refreshing
-      const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+      const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
       
       // Ensure available under oauth: prefix for GoogleDriveService
       await c.env.KV.put(`oauth:${drive.id}`, tokenJson);
@@ -174,7 +174,7 @@ drivesRouter.post('/:id/sync', async (c) => {
   if (!row) return c.json({ error: 'Drive not found' }, 404);
 
   const drive = mapDriveRow(row as Record<string, unknown>);
-  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
   
   // Run the sync process in the background via c.executionCtx.waitUntil
   // so the user doesn't have to wait for the entire sync to complete
@@ -228,7 +228,7 @@ drivesRouter.post('/:driveId/folders/:googleFolderId/sync', async (c) => {
   // Ensure available under oauth: prefix for GoogleDriveService
   await c.env.KV.put(`oauth:${driveId}`, tokenJson);
 
-  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
   const { files: gFiles, folders: gFolders } = await driveService.listFolderContents(driveId, googleFolderId);
 
   const ownerUserId = (driveRow as Record<string, unknown>).user_id as string;

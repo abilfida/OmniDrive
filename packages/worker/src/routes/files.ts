@@ -14,6 +14,51 @@ export const filesRouter = new Hono<AppContext>({ strict: false });
 
 filesRouter.use('*', authGuard);
 
+// GET /api/files/recent
+filesRouter.get('/recent', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const { results: fileRows } = await db.prepare(`
+    SELECT DISTINCT f.*, d.email as driveEmail 
+    FROM files f
+    JOIN drive_accounts d ON f.drive_account_id = d.id
+    LEFT JOIN workspace_members wm ON f.workspace_id = wm.workspace_id
+    WHERE (f.user_id = ? OR wm.user_id = ?)
+      AND f.is_trashed = 0
+    ORDER BY f.updated_at DESC LIMIT 20
+  `).bind(userId, userId).all<Record<string, unknown> & { driveEmail: string }>();
+
+  const { results: folderRows } = await db.prepare(`
+    SELECT DISTINCT f.*, w.name as ws_name 
+    FROM workspace_folders f
+    LEFT JOIN workspace_members wm ON f.workspace_id = wm.workspace_id
+    LEFT JOIN workspaces w ON f.workspace_id = w.id
+    WHERE wm.user_id = ?
+    ORDER BY f.updated_at DESC LIMIT 20
+  `).bind(userId).all();
+
+  // Need to import mapFolderRow if not already in scope, but we can inline the mapping if needed
+  // Let's use mapFileRow and a simple folder mapper
+  const folders = folderRows.map((f: any) => ({
+    id: f.id,
+    workspaceId: f.workspace_id,
+    name: f.name,
+    parentId: f.parent_id,
+    icon: f.icon,
+    color: f.color,
+    isStarred: !!f.is_starred,
+    metadata: f.metadata,
+    createdAt: f.created_at,
+    updatedAt: f.updated_at
+  }));
+
+  return c.json({
+    files: fileRows.map((r) => ({ ...mapFileRow(r), driveEmail: r.driveEmail })),
+    folders
+  });
+});
+
 // GET /api/files/search
 filesRouter.get('/search', async (c) => {
   const userId = c.get('userId');
@@ -79,7 +124,7 @@ filesRouter.get('/starred', async (c) => {
   ).bind(userId).all();
 
   const { results: folderRows } = await db.prepare(
-    'SELECT * FROM virtual_folders WHERE user_id = ? AND is_starred = 1 ORDER BY updated_at DESC'
+    'SELECT f.*, w.name as ws_name FROM workspace_folders f JOIN workspace_members wm ON f.workspace_id = wm.workspace_id WHERE wm.user_id = ? AND f.is_starred = 1 ORDER BY f.updated_at DESC'
   ).bind(userId).all();
 
   // Need to import mapFolderRow if not already
@@ -121,13 +166,11 @@ filesRouter.patch('/:id/move', async (c) => {
   const fileId = c.req.param('id');
   const { folderId } = await c.req.json();
 
-  if (folderId) {
-    const folder = await c.env.DB.prepare('SELECT id FROM virtual_folders WHERE id = ? AND user_id = ?').bind(folderId, userId).first();
-    if (!folder) throw new AppError(404, 'Target folder not found or unauthorized');
-  }
+  const folder = await c.env.DB.prepare('SELECT workspace_id FROM workspace_folders WHERE id = ?').bind(folderId).first<{ workspace_id: string }>();
+  if (!folder && folderId) throw new AppError(404, 'Folder not found');
 
-  await c.env.DB.prepare('UPDATE files SET virtual_folder_id = ?, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
-    .bind(folderId || null, fileId, userId).run();
+  await c.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, workspace_id = ?, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
+    .bind(folderId, folder?.workspace_id || null, fileId, userId).run();
 
   return c.json({ success: true });
 });
@@ -168,7 +211,7 @@ filesRouter.post('/:id/move-drive', async (c) => {
     throw new AppError(404, 'Target drive not found or unauthorized');
   }
 
-  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
 
   let sharePermissionId: string | null = null;
   let copySuccessId: string | null = null;
@@ -307,7 +350,7 @@ filesRouter.post('/upload/finalize', async (c) => {
   }
 
   // Fetch file metadata from Google Drive
-  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
   const gFile = await driveService.getFile(driveAccountId, googleFileId);
 
   const id = generateId();
@@ -417,7 +460,7 @@ filesRouter.delete('/:id/permanent', async (c) => {
     }
   }
 
-  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET);
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
   
   try {
     await driveService.deleteFile(file.driveId, file.google_file_id);

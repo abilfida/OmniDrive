@@ -116,7 +116,7 @@ export const InfoPanel: React.FC = () => {
                 <dd className="text-gray-800">{formatRelativeTime(item.googleCreatedAt)}</dd>
               </div>
             )}
-            {type === 'folder' && (
+            {type === 'folder' && 'lastSyncedAt' in item && (
               <div className="flex flex-col">
                 <dt className="text-gray-500 mb-0.5 text-xs">Last Synced</dt>
                 <dd className="text-gray-800">

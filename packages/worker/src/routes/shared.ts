@@ -70,7 +70,7 @@ sharedRouter.post('/', authGuard, async (c) => {
     const file = await db.prepare('SELECT id FROM files WHERE id = ? AND user_id = ?').bind(targetId, userId).first();
     if (!file) return c.json({ error: 'You do not own this file' }, 403);
   } else if (targetType === 'folder') {
-    const folder = await db.prepare('SELECT id FROM virtual_folders WHERE id = ? AND user_id = ?').bind(targetId, userId).first();
+    const folder = await db.prepare('SELECT id FROM workspace_folders WHERE id = ?').bind(targetId).first();
     if (!folder) return c.json({ error: 'You do not own this folder' }, 403);
   }
 
@@ -154,7 +154,7 @@ sharedRouter.get('/', authGuard, async (c) => {
     SELECT s.*, COALESCE(f.name, v.name) as targetName 
     FROM shared_links s 
     LEFT JOIN files f ON s.target_type = 'file' AND s.target_id = f.id 
-    LEFT JOIN virtual_folders v ON s.target_type = 'folder' AND s.target_id = v.id 
+    LEFT JOIN workspace_folders v ON s.target_type = 'folder' AND s.target_id = v.id 
     WHERE s.user_id = ?
   `).bind(userId).all();
   return c.json({ links: results.map(mapSharedLinkRow) });
@@ -406,7 +406,8 @@ sharedRouter.get('/:id/download', async (c) => {
     const driveService = new GoogleDriveService(
       c.env.KV,
       c.env.GOOGLE_CLIENT_ID,
-      c.env.GOOGLE_CLIENT_SECRET
+      c.env.GOOGLE_CLIENT_SECRET,
+      c.env.TOKEN_ENCRYPTION_KEY
     );
 
     let stream: ReadableStream<Uint8Array>;

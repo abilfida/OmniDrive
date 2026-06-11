@@ -2,13 +2,13 @@ import { useState, useCallback, useEffect } from 'react';
 import { api } from '../lib/api';
 import { useDriveStore } from '../stores/driveStore';
 import { useToastStore } from '../stores/toastStore';
-import type { DriveFolder, FileEntry, BreadcrumbItem } from '../types';
+import type { DriveFolder, FileEntry, BreadcrumbItem, WorkspaceFolder } from '../types';
 
 export function useMergedDrive(folderId: string, driveIdParam: string | null) {
   const drives = useDriveStore(state => state.drives);
   const addToast = useToastStore(state => state.addToast);
   
-  const [subfolders, setSubfolders] = useState<DriveFolder[]>([]);
+  const [subfolders, setSubfolders] = useState<(DriveFolder | WorkspaceFolder)[]>([]);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
