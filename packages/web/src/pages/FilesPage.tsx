@@ -100,17 +100,16 @@ export function FilesPage() {
     <DropZone>
       <div className="flex flex-col h-full w-full">
         {/* Toolbar */}
-        {selectedItems.length > 0 ? (
-          <BulkActionBar 
-            onActionComplete={() => refresh()} 
-            onWorkspaceRequested={() => setWorkspaceTarget(selectedItems[0].item as FileEntry)}
-            onMoveDriveRequested={() => {
-              const files = selectedItems.filter(i => i.type === 'file').map(i => i.item as FileEntry);
-              setMoveDriveFiles(files);
-            }}
-          />
-        ) : (
-          <div className="flex items-center justify-between mb-6 flex-wrap gap-4 px-4 pt-4">
+        <BulkActionBar 
+          onActionComplete={() => refresh()} 
+          onWorkspaceRequested={() => setWorkspaceTarget(selectedItems[0].item as FileEntry)}
+          onMoveDriveRequested={() => {
+            const files = selectedItems.filter(i => i.type === 'file').map(i => i.item as FileEntry);
+            setMoveDriveFiles(files);
+          }}
+        />
+
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4 px-4 pt-4">
             <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
               <Breadcrumb items={breadcrumb} driveId={driveIdParam || undefined} />
             </div>
@@ -168,7 +167,7 @@ export function FilesPage() {
               </button>
             </div>
           </div>
-        )}
+        </div>
 
         {isLoading || isDrivesLoading ? (
           <div className="flex flex-col items-center justify-center p-16">
