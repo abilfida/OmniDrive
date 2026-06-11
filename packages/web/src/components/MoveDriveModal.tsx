@@ -52,9 +52,15 @@ export function MoveDriveModal({ files, onClose, onSuccess, onError }: MoveDrive
         addToast('success', `✅ Moved ${successCount} item(s) to ${drive.email}`);
       } else if (failCount > 0) {
         addToast('error', `⚠️ Moved ${successCount} item(s), ${failCount} failed`);
+      } else if (successCount === 0 && failCount === 0) {
+        addToast('info', 'Items are already in the selected drive');
       }
       
-      onSuccess();
+      if (successCount > 0) {
+        onSuccess();
+      } else {
+        onClose();
+      }
     } catch (err) {
       onError(err);
     } finally {
