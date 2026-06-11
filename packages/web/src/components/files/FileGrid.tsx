@@ -262,7 +262,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
       <div className="w-full">
         {/* Table header */}
         <div className="grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 border-b border-gray-100 px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide group">
-          <div className="w-14 flex items-center pl-3">
+          <div className="w-[72px] flex items-center pl-3">
             <input
               type="checkbox"
               className={`w-4 h-4 cursor-pointer ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
@@ -332,7 +332,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <div className="w-14 flex items-center gap-2 pl-3">
+                  <div className="w-[72px] flex items-center gap-2 pl-3">
                     <input 
                       type="checkbox" 
                       className={`w-4 h-4 cursor-pointer flex-shrink-0 ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
@@ -414,7 +414,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <div className="w-14 flex items-center gap-2 pl-3">
+                  <div className="w-[72px] flex items-center gap-2 pl-3">
                     <input 
                       type="checkbox" 
                       className={`w-4 h-4 cursor-pointer flex-shrink-0 ${hasSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
@@ -510,7 +510,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                 onMouseLeave={() => {
                   if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                 }}
-                className={`p-3 border rounded-xl cursor-pointer flex items-center gap-2.5 transition-all group relative ${
+                className={`p-3 border rounded-xl cursor-pointer flex items-center gap-4 transition-all group relative ${
                     isSelected
                     ? 'bg-blue-100 border-blue-300'
                     : hasError
