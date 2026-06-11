@@ -294,7 +294,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       if (isVirtual) {
                         api.getFolderContents(folder.id).catch(() => {});
                       } else if (driveAccountId && 'googleFolderId' in folder) {
-                        api.getFolderContents(folder.googleFolderId, undefined, undefined, driveAccountId).catch(() => {});
+                        api.getDriveFolderContents(driveAccountId, folder.googleFolderId).catch(() => {});
                       }
                     }, 300);
                   }}
@@ -480,7 +480,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     if (isVirtual) {
                       api.getFolderContents(folder.id).catch(() => {});
                     } else if (driveAccountId && 'googleFolderId' in folder) {
-                      api.getFolderContents(folder.googleFolderId, undefined, undefined, driveAccountId).catch(() => {});
+                      api.getDriveFolderContents(driveAccountId, folder.googleFolderId).catch(() => {});
                     }
                   }, 300);
                 }}
