@@ -39,6 +39,7 @@ export interface Workspace {
   name: string;
   ownerId: string;
   usedBytes?: number;
+  syncTtlMinutes: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,6 +61,8 @@ export interface WorkspaceFolder {
   color: string | null;
   metadata?: string | Record<string, string>;
   isStarred: boolean;
+  lastSyncedAt: string | null;
+  syncStatus: 'idle' | 'syncing' | 'error';
   createdAt: string;
   updatedAt: string;
 }
@@ -83,6 +86,8 @@ export interface FileEntry {
   googleCreatedAt: string | null;
   googleModifiedAt: string | null;
   syncedAt: string;
+  lastSyncedAt: string | null;
+  syncStatus: 'idle' | 'syncing' | 'error';
   createdAt: string;
   driveEmail?: string;  // optional — not present in folder-browse responses
   isStarred?: boolean;

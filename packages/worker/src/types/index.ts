@@ -58,6 +58,8 @@ export interface FileEntry {
   googleCreatedAt: string | null;
   googleModifiedAt: string | null;
   syncedAt: string;
+  lastSyncedAt: string | null;
+  syncStatus: 'idle' | 'syncing' | 'error';
   createdAt: string;
 }
 
@@ -195,7 +197,7 @@ export function mapFileRow(row: Record<string, unknown>): FileEntry {
     userId: row.user_id as string,
     driveAccountId: row.drive_account_id as string,
     googleFileId: row.google_file_id as string,
-    virtualFolderId: (row.virtual_folder_id as string) ?? null,
+    virtualFolderId: (row.workspace_folder_id as string) ?? (row.virtual_folder_id as string) ?? null,
     googleParentId: (row.google_parent_id as string) ?? null,
     name: row.name as string,
     mimeType: (row.mime_type as string) ?? null,
@@ -208,6 +210,8 @@ export function mapFileRow(row: Record<string, unknown>): FileEntry {
     googleCreatedAt: (row.google_created_at as string) ?? null,
     googleModifiedAt: (row.google_modified_at as string) ?? null,
     syncedAt: row.synced_at as string,
+    lastSyncedAt: (row.last_synced_at as string) ?? null,
+    syncStatus: (row.sync_status as 'idle' | 'syncing' | 'error') ?? 'idle',
     createdAt: row.created_at as string,
   };
 }
@@ -273,4 +277,107 @@ export function mapAutomationLogRow(row: Record<string, unknown>): AutomationLog
     details: (row.details as string) ?? null,
     executedAt: row.executed_at as string,
   };
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  ownerId: string;
+  usedBytes?: number;
+  syncTtlMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceFolder {
+  id: string;
+  workspaceId: string;
+  name: string;
+  parentId: string | null;
+  icon: string | null;
+  color: string | null;
+  metadata?: string | Record<string, string>;
+  isStarred: boolean;
+  lastSyncedAt: string | null;
+  syncStatus: 'idle' | 'syncing' | 'error';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function mapWorkspaceRow(row: Record<string, unknown>): Workspace {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    ownerId: row.owner_id as string,
+    usedBytes: (row.used_bytes as number) ?? 0,
+    syncTtlMinutes: (row.sync_ttl_minutes as number) ?? 5,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function mapWorkspaceFolderRow(row: Record<string, unknown>): WorkspaceFolder {
+  return {
+    id: row.id as string,
+    workspaceId: row.workspace_id as string,
+    name: row.name as string,
+    parentId: (row.parent_id as string) ?? null,
+    icon: (row.icon as string) ?? null,
+    color: (row.color as string) ?? null,
+    metadata: (row.metadata as string) ?? '{}',
+    isStarred: row.is_starred === 1,
+    lastSyncedAt: (row.last_synced_at as string) ?? null,
+    syncStatus: (row.sync_status as 'idle' | 'syncing' | 'error') ?? 'idle',
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export interface WorkspaceRow {
+  id: string;
+  name: string;
+  owner_id: string;
+  used_bytes: number;
+  created_at: string;
+  updated_at: string;
+  sync_ttl_minutes: number;
+}
+
+export interface WorkspaceFolderRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  parent_id: string | null;
+  icon: string | null;
+  color: string | null;
+  is_starred: number;
+  metadata: string;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+  sync_status: 'idle' | 'syncing' | 'error';
+}
+
+export interface FileRow {
+  id: string;
+  user_id: string;
+  drive_account_id: string;
+  google_file_id: string;
+  workspace_id: string | null;
+  workspace_folder_id: string | null;
+  google_parent_id: string | null;
+  name: string;
+  mime_type: string | null;
+  size: number;
+  thumbnail_url: string | null;
+  web_view_link: string | null;
+  web_content_link: string | null;
+  is_trashed: number;
+  is_starred: number;
+  metadata: string;
+  google_created_at: string | null;
+  google_modified_at: string | null;
+  synced_at: string;
+  last_synced_at: string | null;
+  sync_status: 'idle' | 'syncing' | 'error';
 }
