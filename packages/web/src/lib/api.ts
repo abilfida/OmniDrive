@@ -61,7 +61,10 @@ export const api = {
 
   // Folders
   getRootContents: () => request<import('../types').FolderContents>('/api/folders/'),
-  getFolderContents: (id: string) => request<import('../types').FolderContents>(`/api/folders/${id}`),
+  getFolderContents: (id: string, cursor?: string) => {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return request<import('../types').FolderContents>(`/api/folders/${id}${query}`);
+  },
   createFolder: (name: string, parentId?: string, icon?: string, color?: string) =>
     request<{ folder: WorkspaceFolder }>('/api/folders', {
       method: 'POST',
@@ -130,7 +133,7 @@ export const api = {
 
   // Recent files (uses root contents, sorted by date)
   getRecentFiles: () =>
-    request<{ files: import('../types').FileEntry[] }>('/api/files/search?q=%'),
+    request<{ files: import('../types').FileEntry[], folders: import('../types').WorkspaceFolder[] }>('/api/files/recent'),
 
   // Automations
   getAutomations: () => request<{ rules: any[] }>('/api/automations'),

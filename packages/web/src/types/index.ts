@@ -94,11 +94,17 @@ export interface BreadcrumbItem {
   name: string;
 }
 
+export interface PaginationMeta {
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export interface FolderContents {
   folder: WorkspaceFolder | null;
   subfolders: WorkspaceFolder[];
   files: FileEntry[];
   breadcrumb: BreadcrumbItem[];
+  pagination?: PaginationMeta;
 }
 
 export interface DriveFolder {
