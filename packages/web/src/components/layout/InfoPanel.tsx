@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSelectionStore } from '../../stores/useSelectionStore';
-import { formatFileSize, formatRelativeTime, getFileIcon } from '../../lib/utils';
+import { formatFileSize, formatRelativeTime } from '../../lib/utils';
+import { FileIcon } from '../files/FileIcon';
 import { X, File, Folder, Loader2, RefreshCw } from 'lucide-react';
 import { useUIStore } from '../../stores/useUIStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -75,11 +76,11 @@ export const InfoPanel: React.FC = () => {
       <div className="mb-6 flex justify-center">
         {type === 'folder' ? (
           <div className="w-24 h-24 bg-blue-50 rounded-2xl flex items-center justify-center">
-            <Folder size={48} className="text-blue-500" />
+            <Folder size={48} className="text-blue-500" fill="currentColor" />
           </div>
         ) : (
           <div className="w-24 h-24 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-center text-5xl shadow-sm">
-            {getFileIcon(item.mimeType)}
+            <FileIcon mimeType={item.mimeType} />
           </div>
         )}
       </div>

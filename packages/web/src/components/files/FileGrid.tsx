@@ -1,6 +1,7 @@
 import React from 'react';
 import type { FileEntry, DriveFolder, WorkspaceFolder } from '../../types';
-import { getFileIcon, formatFileSize, formatRelativeTime, getDriveColor } from '../../lib/utils';
+import { formatFileSize, formatRelativeTime, getDriveColor } from '../../lib/utils';
+import { FileIcon } from './FileIcon';
 import { Folder, Download, Trash2, Pencil, ExternalLink, Share2, RefreshCw, Eye, Star, Info } from 'lucide-react';
 import { api } from '../../lib/api';
 import {
@@ -342,7 +343,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                         handleItemClick(e, { type: 'folder', item: folder });
                       }}
                     />
-                    <Folder size={20} className="text-blue-500 flex-shrink-0" />
+                    <Folder size={20} className="text-blue-500 flex-shrink-0" fill="currentColor" />
                   </div>
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm text-gray-800 font-medium truncate">{folder.name}</span>
@@ -424,7 +425,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                         handleItemClick(e, { type: 'file', item: file });
                       }}
                     />
-                    <span className="text-xl flex-shrink-0">{getFileIcon(file.mimeType)}</span>
+                    <span className="text-xl flex-shrink-0"><FileIcon mimeType={file.mimeType} /></span>
                   </div>
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm text-gray-800 truncate" title={file.name}>{file.name}</span>
@@ -527,7 +528,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     handleItemClick(e, { type: 'folder', item: folder });
                   }}
                 />
-                <Folder size={20} className="text-blue-500 flex-shrink-0 ml-5" />
+                <Folder size={20} className="text-blue-500 flex-shrink-0 ml-5" fill="currentColor" />
                 <div className="flex-1 truncate text-sm font-medium text-gray-800">
                   {folder.name}
                 </div>
@@ -605,7 +606,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                   }}
                 />
                 <div className="flex justify-between items-start">
-                  <div className="text-3xl ml-5">{getFileIcon(file.mimeType)}</div>
+                  <div className="text-3xl ml-5"><FileIcon mimeType={file.mimeType} /></div>
                   <div className="flex gap-1 items-center">
                     {file.isStarred && <Star className="fill-yellow-400 text-yellow-400 flex-shrink-0" size={14} />}
                     {shared && <Share2 size={12} className="text-blue-400 flex-shrink-0" />}

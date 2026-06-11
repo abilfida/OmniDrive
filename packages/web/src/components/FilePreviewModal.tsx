@@ -1,6 +1,7 @@
 import { X, ExternalLink, Download } from 'lucide-react';
 import type { FileEntry } from '../types';
-import { formatFileSize, formatRelativeTime, getFileIcon } from '../lib/utils';
+import { formatFileSize, formatRelativeTime } from '../lib/utils';
+import { FileIcon } from './files/FileIcon';
 
 interface FilePreviewModalProps {
   file: FileEntry;
@@ -20,7 +21,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
         {/* Header */}
         <div className="flex justify-between items-start p-5 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-4 min-w-0">
-            <span className="text-4xl shrink-0">{getFileIcon(file.mimeType)}</span>
+            <span className="text-4xl shrink-0"><FileIcon mimeType={file.mimeType} /></span>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-gray-800 truncate" title={file.name}>
                 {file.name}

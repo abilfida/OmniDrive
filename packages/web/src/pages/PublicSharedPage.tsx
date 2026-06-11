@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { getSharedMeta, verifySharedPassword, SharedMetaResponse } from '../lib/api';
-import { getFileIcon, formatFileSize } from '../lib/utils';
-import { Lock, Download, AlertCircle, Loader2 } from 'lucide-react';
+import { formatFileSize } from '../lib/utils';
+import { FileIcon } from '../components/files/FileIcon';
+import { Lock, Download, AlertCircle, Loader2, Folder } from 'lucide-react';
 
 export function PublicSharedPage() {
   const { id } = useParams<{ id: string }>();
@@ -124,13 +125,13 @@ export function PublicSharedPage() {
       <div className="bg-white p-10 rounded-2xl shadow-xl max-w-md w-full border border-gray-100 text-center">
         {meta?.type === 'folder' ? (
           <div className="mb-8">
-            <div className="text-7xl mb-4 leading-none">📁</div>
+            <div className="mb-4 flex justify-center"><Folder size={72} className="text-blue-500" fill="currentColor" /></div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Shared Folder</h2>
             <p className="text-gray-500">Folder view is not supported yet.</p>
           </div>
         ) : (
           <div className="mb-8">
-            <div className="text-7xl mb-4 leading-none">{getFileIcon(meta?.target?.mimeType || null)}</div>
+            <div className="text-7xl mb-4 leading-none flex justify-center"><FileIcon mimeType={meta?.target?.mimeType || null} /></div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2 break-words">{meta?.target?.name || 'Unknown File'}</h2>
             {typeof meta?.target?.size === 'number' && (
               <p className="text-gray-500">{formatFileSize(meta.target.size)}</p>

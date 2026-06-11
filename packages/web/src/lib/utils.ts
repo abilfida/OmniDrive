@@ -28,19 +28,7 @@ export function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
-export function getFileIcon(mimeType: string | null): string {
-  if (!mimeType) return '📄';
-  if (mimeType.startsWith('image/')) return '🖼️';
-  if (mimeType.startsWith('video/')) return '🎬';
-  if (mimeType.startsWith('audio/')) return '🎵';
-  if (mimeType.includes('pdf')) return '📕';
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊';
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️';
-  if (mimeType.includes('document') || mimeType.includes('word')) return '📝';
-  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive')) return '📦';
-  if (mimeType.includes('text')) return '📄';
-  return '📄';
-}
+
 
 export function getDriveColor(index: number): string {
   const colors = [
