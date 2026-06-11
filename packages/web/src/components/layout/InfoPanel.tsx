@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { formatFileSize, formatRelativeTime, getFileIcon } from '../../lib/utils';
-import { X, File, Folder } from 'lucide-react';
+import { X, File, Folder, Loader2, RefreshCw } from 'lucide-react';
 import { useUIStore } from '../../stores/useUIStore';
+import { useToastStore } from '../../stores/toastStore';
 
 export const InfoPanel: React.FC = () => {
   const selectedItems = useSelectionStore((s) => s.selectedItems);
@@ -44,6 +45,23 @@ export const InfoPanel: React.FC = () => {
   }
 
   const { type, item } = selectedItems[0];
+  const [isSyncing, setIsSyncing] = useState(false);
+  const addToast = useToastStore((s) => s.addToast);
+
+  const handleForceSync = async () => {
+    if (type !== 'folder') return;
+    setIsSyncing(true);
+    try {
+      const { api } = await import('../../lib/api');
+      const driveId = (item as any).driveAccountId || '';
+      await api.forceSyncFolder(item.id!, driveId);
+      addToast('success', 'Sync queued. Data will update shortly.');
+    } catch (err: any) {
+      addToast('error', err.message || 'Failed to queue sync.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <aside className="w-80 bg-white border-l border-gray-200 p-4 flex flex-col flex-shrink-0 overflow-y-auto">
@@ -98,7 +116,28 @@ export const InfoPanel: React.FC = () => {
                 <dd className="text-gray-800">{formatRelativeTime(item.googleCreatedAt)}</dd>
               </div>
             )}
+            {type === 'folder' && (
+              <div className="flex flex-col">
+                <dt className="text-gray-500 mb-0.5 text-xs">Last Synced</dt>
+                <dd className="text-gray-800">
+                  {item.lastSyncedAt ? formatRelativeTime(item.lastSyncedAt) : 'Never'}
+                </dd>
+              </div>
+            )}
           </dl>
+          
+          {type === 'folder' && (
+            <div className="mt-4">
+              <button
+                onClick={handleForceSync}
+                disabled={isSyncing}
+                className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                {isSyncing ? 'Syncing...' : 'Force Sync'}
+              </button>
+            </div>
+          )}
         </div>
         
         <div className="border-t border-gray-100 pt-4">

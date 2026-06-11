@@ -89,6 +89,8 @@ export const api = {
     }),
   syncWorkspace: (id: string) =>
     request<{ success: boolean }>(`/api/folders/${id}/sync`, { method: 'POST' }),
+  forceSyncFolder: (id: string, driveId: string) => 
+    request<{ success: boolean }>(`/api/folders/${id}/force-sync?driveId=${driveId}`, { method: 'POST' }),
 
   // Files
   getFile: (id: string) => request<import('../types').FileEntry>(`/api/files/${id}`),

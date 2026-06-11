@@ -358,3 +358,41 @@ foldersRouter.post('/:id/sync', async (c) => {
   
   return c.json({ success: true });
 });
+
+foldersRouter.post('/:id/force-sync', async (c) => {
+  const userId = c.get('userId');
+  const folderId = c.req.param('id');
+  let driveId = c.req.query('driveId') || null;
+  const db = c.env.DB;
+
+  if (!driveId) {
+    // Look up via files table if not passed directly
+    const { results } = await db.prepare(`
+      SELECT DISTINCT d.id 
+      FROM files f 
+      JOIN drive_accounts d ON f.drive_account_id = d.id 
+      WHERE (f.workspace_folder_id = ? OR f.workspace_id = ?) AND f.user_id = ? LIMIT 1
+    `).bind(folderId, folderId, userId).all<{ id: string }>();
+    if (results && results.length > 0) {
+      driveId = results[0].id;
+    }
+  }
+
+  if (!driveId) {
+    // If still not found, try to look up the user's primary drive or any drive
+    const { results } = await db.prepare(`
+      SELECT id FROM drive_accounts WHERE user_id = ? ORDER BY is_primary DESC LIMIT 1
+    `).bind(userId).all<{ id: string }>();
+    if (results && results.length > 0) {
+      driveId = results[0].id;
+    }
+  }
+
+  if (!driveId) {
+    throw new AppError(400, 'driveId is required or could not be determined');
+  }
+
+  c.executionCtx.waitUntil(performBackgroundSync(c.env, folderId, driveId, userId));
+  
+  return c.json({ success: true });
+});
