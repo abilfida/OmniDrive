@@ -245,7 +245,7 @@ foldersRouter.put('/:id', async (c) => {
   
   const ws = await db.prepare('SELECT id FROM workspaces WHERE id = ?').bind(folderId).first();
   if (ws) {
-    if (name) await db.prepare('UPDATE workspaces SET name = ?, updated_at = datetime("now") WHERE id = ?').bind(name, folderId).run();
+    if (name) await db.prepare('UPDATE workspaces SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(name, folderId).run();
     return c.json({ success: true });
   }
 
@@ -271,7 +271,7 @@ foldersRouter.put('/:id', async (c) => {
   }
 
   if (updateFields.length > 0) {
-    updateFields.push('updated_at = datetime("now")');
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
     params.push(folderId);
     await db.prepare(`UPDATE workspace_folders SET ${updateFields.join(', ')} WHERE id = ?`).bind(...params).run();
   }
@@ -281,13 +281,13 @@ foldersRouter.put('/:id', async (c) => {
 
 foldersRouter.post('/:id/star', async (c) => {
   const folderId = c.req.param('id');
-  await c.env.DB.prepare('UPDATE workspace_folders SET is_starred = 1, updated_at = datetime("now") WHERE id = ?').bind(folderId).run();
+  await c.env.DB.prepare('UPDATE workspace_folders SET is_starred = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(folderId).run();
   return c.json({ success: true });
 });
 
 foldersRouter.post('/:id/unstar', async (c) => {
   const folderId = c.req.param('id');
-  await c.env.DB.prepare('UPDATE workspace_folders SET is_starred = 0, updated_at = datetime("now") WHERE id = ?').bind(folderId).run();
+  await c.env.DB.prepare('UPDATE workspace_folders SET is_starred = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(folderId).run();
   return c.json({ success: true });
 });
 

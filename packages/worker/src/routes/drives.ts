@@ -95,7 +95,7 @@ drivesRouter.get('/', async (c) => {
       const usagePercent = quota.total > 0 ? (quota.used / quota.total) * 100 : 0;
 
       c.executionCtx.waitUntil(
-        db.prepare('UPDATE drive_accounts SET total_quota = ?, used_quota = ?, quota_updated_at = datetime("now") WHERE id = ?')
+        db.prepare('UPDATE drive_accounts SET total_quota = ?, used_quota = ?, quota_updated_at = CURRENT_TIMESTAMP WHERE id = ?')
           .bind(quota.total, quota.used, drive.id).run()
       );
 

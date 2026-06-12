@@ -146,7 +146,7 @@ export class AutomationEngine {
         
         if (action.type === ACTION_MOVE && targetFolderId) {
           stmts.push(
-            this.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, updated_at = datetime("now") WHERE id = ?')
+            this.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
               .bind(targetFolderId as string, file.id)
           );
         } else if (action.type === ACTION_DELETE) {

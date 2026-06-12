@@ -154,7 +154,7 @@ filesRouter.patch('/:id/rename', async (c) => {
 
   if (!name) throw new AppError(400, 'Name is required');
 
-  await c.env.DB.prepare('UPDATE files SET name = ?, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
+  await c.env.DB.prepare('UPDATE files SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
     .bind(name, fileId, userId).run();
 
   return c.json({ success: true });
@@ -169,7 +169,7 @@ filesRouter.patch('/:id/move', async (c) => {
   const folder = await c.env.DB.prepare('SELECT workspace_id FROM workspace_folders WHERE id = ?').bind(folderId).first<{ workspace_id: string }>();
   if (!folder && folderId) throw new AppError(404, 'Folder not found');
 
-  await c.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, workspace_id = ?, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
+  await c.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, workspace_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
     .bind(folderId, folder?.workspace_id || null, fileId, userId).run();
 
   return c.json({ success: true });
@@ -249,7 +249,7 @@ filesRouter.post('/:id/move-drive', async (c) => {
 
     await db.prepare(
       `UPDATE files 
-       SET drive_account_id = ?, google_file_id = ?, google_parent_id = NULL, updated_at = datetime("now")
+       SET drive_account_id = ?, google_file_id = ?, google_parent_id = NULL, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).bind(targetDriveId, copiedFile.id, fileId).run();
 
@@ -410,7 +410,7 @@ filesRouter.post('/:id/restore', async (c) => {
   const userId = c.get('userId');
   const fileId = c.req.param('id');
   
-  const { meta } = await c.env.DB.prepare('UPDATE files SET is_trashed = 0, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
+  const { meta } = await c.env.DB.prepare('UPDATE files SET is_trashed = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
     .bind(fileId, userId).run();
 
   if (meta.changes === 0) {

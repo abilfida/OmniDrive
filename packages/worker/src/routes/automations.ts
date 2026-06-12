@@ -61,7 +61,7 @@ automationsRouter.patch('/:id/toggle', async (c) => {
     throw new AppError(400, 'is_active must be a boolean');
   }
   
-  const { meta } = await c.env.DB.prepare('UPDATE automation_rules SET is_active = ?, updated_at = datetime("now") WHERE id = ? AND user_id = ?')
+  const { meta } = await c.env.DB.prepare('UPDATE automation_rules SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
     .bind(body.is_active ? IS_ACTIVE : IS_INACTIVE, ruleId, userId).run();
     
   if (meta.changes === 0) {
