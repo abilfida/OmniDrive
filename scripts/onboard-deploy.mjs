@@ -184,34 +184,58 @@ async function main() {
     
     outro(pc.green('✅ Deployed successfully to Cloudflare!'));
   } else if (target === 'local') {
-    const clientId = checkCancel(await text({
-      message: 'Enter your Google OAuth Client ID:',
-      validate(value) { if (!value) return 'Required'; }
-    }));
+    let proceedWithEnv = true;
+    if (fs.existsSync('packages/worker/.dev.vars') || fs.existsSync('packages/web/.env')) {
+      const overwrite = checkCancel(await confirm({
+        message: 'Local environment files already exist. Do you want to overwrite them?'
+      }));
+      if (!overwrite) {
+        proceedWithEnv = false;
+      }
+    }
 
-    const clientSecret = checkCancel(await text({
-      message: 'Enter your Google OAuth Client Secret:',
-      validate(value) { if (!value) return 'Required'; }
-    }));
+    if (proceedWithEnv) {
+      const clientId = checkCancel(await text({
+        message: 'Enter your Google OAuth Client ID:',
+        validate(value) { if (!value) return 'Required'; }
+      }));
 
-    const s = spinner();
-    s.start('Setting up local environment...');
+      const clientSecret = checkCancel(await text({
+        message: 'Enter your Google OAuth Client Secret:',
+        validate(value) { if (!value) return 'Required'; }
+      }));
 
-    const jwtSecret = generateSecret(32);
-    const tokenEncryptionKey = generateSecret(32);
+      const s1 = spinner();
+      s1.start('Setting up local environment...');
 
-    const devVarsContent = `GOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
-    
-    if (!fs.existsSync('packages/worker')) fs.mkdirSync('packages/worker', { recursive: true });
-    fs.writeFileSync('packages/worker/.dev.vars', devVarsContent);
+      const jwtSecret = generateSecret(32);
+      const tokenEncryptionKey = generateSecret(32);
 
-    if (!fs.existsSync('packages/web')) fs.mkdirSync('packages/web', { recursive: true });
-    fs.writeFileSync('packages/web/.env', \`VITE_API_URL=\\n\`);
+      const devVarsContent = `GOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
+      
+      if (!fs.existsSync('packages/worker')) fs.mkdirSync('packages/worker', { recursive: true });
+      fs.writeFileSync('packages/worker/.dev.vars', devVarsContent);
 
-    s.message('Running local D1 migrations...');
-    runCmdSilent('npx wrangler d1 execute omnidrive --local --file=packages/worker/src/db/schema.sql');
+      if (!fs.existsSync('packages/web')) fs.mkdirSync('packages/web', { recursive: true });
+      fs.writeFileSync('packages/web/.env', \`VITE_API_URL=\\n\`);
 
-    s.stop('Local environment ready.');
+      s1.stop('Local environment files created.');
+    }
+
+    const s2 = spinner();
+    s2.start('Running local D1 migrations...');
+
+    const wranglerPath = 'packages/worker/wrangler.toml';
+    const wranglerExamplePath = 'packages/worker/wrangler.example.toml';
+    if (!fs.existsSync(wranglerPath)) {
+      if (fs.existsSync(wranglerExamplePath)) {
+        fs.copyFileSync(wranglerExamplePath, wranglerPath);
+      }
+    }
+
+    runCmdSilent('npx wrangler d1 execute omnidrive --local --file=packages/worker/src/db/schema.sql -c packages/worker/wrangler.toml');
+
+    s2.stop('Local environment ready.');
 
     console.log(pc.cyan('Starting local development server...'));
     runCmd('npm run dev');
