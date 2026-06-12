@@ -1,6 +1,6 @@
 {
   "name": "omnidrive",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "description": "Unified multi-Google Drive storage gateway built on Cloudflare Workers",
   "private": true,
   "license": "MIT",
