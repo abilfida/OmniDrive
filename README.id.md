@@ -85,98 +85,37 @@ Backend dan frontend berkomunikasi via REST API. Saat development, dev server Vi
 
 ## Memulai
 
-### 1. Clone dan Install
+### 1. Clone Repositori
 
 ```bash
 git clone https://github.com/abilfida/omnidrive.git
 cd omnidrive
-npm install
 ```
 
-### 2. Konfigurasi Worker
+### 2. Siapkan Kredensial Google OAuth
 
-```bash
-# Salin contoh konfigurasi
-cp packages/worker/wrangler.example.toml packages/worker/wrangler.toml
-
-# Buat database D1
-npx wrangler d1 create omnidrive
-# Salin database_id dari output ke wrangler.toml
-
-# Buat KV namespace
-npx wrangler kv namespace create KV
-# Salin namespace id dari output ke wrangler.toml
-
-# Terapkan skema database
-npx wrangler d1 execute omnidrive --local --file=packages/worker/src/db/schema.sql
-```
-
-### 3. Siapkan Kredensial Google OAuth
-
-```bash
-# Salin template secrets
-cp packages/worker/.dev.vars.example packages/worker/.dev.vars
-```
-
-Edit `packages/worker/.dev.vars` dan isi kredensial Google OAuth:
-
+Sebelum menjalankan wizard instalasi, pastikan kamu sudah mengonfigurasi Google OAuth App:
 1. Buka [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
 2. Buat **OAuth 2.0 Client ID** (tipe Web application)
-3. Tambahkan `http://localhost:8787/api/auth/google/callback` sebagai authorized redirect URI
-4. Salin Client ID dan Client Secret ke `.dev.vars`
+3. Tambahkan `http://localhost:8787/api/auth/google/callback` sebagai authorized redirect URI (jika lokal) atau callback domain production kamu.
+4. Simpan Client ID dan Client Secret.
 
-### 4. Konfigurasi Frontend
+### 3. Jalankan Setup Interaktif
 
-```bash
-cp packages/web/.env.example packages/web/.env
-```
-
-Untuk development lokal, biarkan `VITE_API_URL` kosong — dev server Vite otomatis mem-proxy panggilan API.
-
-### 5. Jalankan
+Omnidrive dilengkapi dengan wizard instalasi otomatis yang mengatur environment, menyiapkan database, dan menjalankan aplikasi untuk kamu:
 
 ```bash
-npm run dev
+./deploy.sh
 ```
 
-Ini menjalankan Worker (port 8787) dan web app (port 5173) secara bersamaan. Buka [http://localhost:5173](http://localhost:5173) di browser.
+Ikuti panduan di layar untuk memilih target deployment kamu:
+- **💻 Local Development**: Otomatis menyiapkan database D1/KV lokal, menghasilkan secret, dan menjalankan `npm run dev`.
+- **🐳 Docker Compose (Self-hosted)**: Menghasilkan file `.env`, mengatur port pilihan kamu, dan menjalankan `docker compose up -d`.
+- **☁️ Cloudflare (Production)**: Menyiapkan sumber daya D1/KV remote, mengirimkan secrets ke Cloudflare, dan mendeploy API serta Frontend langsung ke edge.
 
-## Manajemen Database
+Atau gunakan [dashboard Cloudflare Pages](https://dash.cloudflare.com/?to=/:account/pages) untuk deployment otomatis dari repo Git jika kamu lebih memilih menggunakan CI/CD.
 
-Jika kamu perlu melakukan factory reset total atas seluruh data (menghapus semua tabel di D1 dan membersihkan semua sesi di KV), kamu bisa menggunakan perintah reset bawaan. Perintah ini sudah dioptimalkan untuk menangani strict foreign key constraints pada D1.
 
-```bash
-# Reset database dan KV untuk development lokal
-make reset-local
-
-# Reset database dan KV untuk production (remote)
-# PERINGATAN: Ini menghapus SELURUH data production! Memerlukan konfirmasi 'YES' secara eksplisit.
-make reset-remote
-```
-
-## Deployment
-
-### Backend (Cloudflare Workers)
-
-```bash
-# Set secrets untuk production
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-
-# Update FRONTEND_URL dan WORKER_URL di wrangler.toml [vars] ke URL production
-
-# Deploy
-make deploy-worker
-```
-
-### Frontend (Cloudflare Pages)
-
-```bash
-# Set VITE_API_URL di packages/web/.env.production ke URL Worker kamu
-make deploy-web
-```
-
-Atau gunakan [dashboard Cloudflare Pages](https://dash.cloudflare.com/?to=/:account/pages) untuk deployment otomatis dari repo Git.
 
 ## Variabel Environment
 

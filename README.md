@@ -85,98 +85,36 @@ The backend and frontend communicate via REST API. In development, Vite's dev se
 
 ## Getting Started
 
-### 1. Clone and Install
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/abilfida/omnidrive.git
 cd omnidrive
-npm install
 ```
 
-### 2. Configure the Worker
+### 2. Setup Google OAuth Credentials
 
-```bash
-# Copy the example config
-cp packages/worker/wrangler.example.toml packages/worker/wrangler.toml
-
-# Create a D1 database
-npx wrangler d1 create omnidrive
-# Copy the database_id from the output into wrangler.toml
-
-# Create a KV namespace
-npx wrangler kv namespace create KV
-# Copy the namespace id from the output into wrangler.toml
-
-# Apply the database schema
-npx wrangler d1 execute omnidrive --local --file=packages/worker/src/db/schema.sql
-```
-
-### 3. Set Up Google OAuth Credentials
-
-```bash
-# Copy the secrets template
-cp packages/worker/.dev.vars.example packages/worker/.dev.vars
-```
-
-Edit `packages/worker/.dev.vars` and fill in your Google OAuth credentials:
-
+Before running the deployment wizard, ensure you have a Google OAuth App configured:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
 2. Create an **OAuth 2.0 Client ID** (Web application type)
-3. Add `http://localhost:8787/api/auth/google/callback` as an authorized redirect URI
-4. Copy the Client ID and Client Secret into `.dev.vars`
+3. Add `http://localhost:8787/api/auth/google/callback` as an authorized redirect URI (if running locally) or your production domain callback.
+4. Keep the Client ID and Client Secret handy.
 
-### 4. Configure the Frontend
+### 3. Run the Interactive Setup
 
-```bash
-cp packages/web/.env.example packages/web/.env
-```
-
-For local development, leave `VITE_API_URL` empty — the Vite dev server proxies API calls automatically.
-
-### 5. Run
+Omnidrive includes a fully automated deployment wizard that configures your environment, sets up databases, and starts the application for you:
 
 ```bash
-npm run dev
+./deploy.sh
 ```
 
-This starts both the Worker (port 8787) and the web app (port 5173) concurrently. Open [http://localhost:5173](http://localhost:5173) in your browser.
+Follow the prompts to select your deployment target:
+- **💻 Local Development**: Automatically provisions local D1/KV databases, generates secrets, and starts `npm run dev`.
+- **🐳 Docker Compose (Self-hosted)**: Generates `.env`, exposes your selected port, and runs `docker compose up -d`.
+- **☁️ Cloudflare (Production)**: Provisions remote D1/KV resources, pushes secrets to Cloudflare, and deploys the API and Frontend directly to the edge.
 
-## Database Management
+Or use the [Cloudflare Pages dashboard](https://dash.cloudflare.com/?to=/:account/pages) for automatic deployments from your Git repo if you prefer CI/CD.
 
-If you need to perform a complete factory reset of all data (dropping all tables in D1 and clearing all sessions in KV), you can use the built-in reset commands. These commands are optimized to handle D1's strict foreign key constraints.
-
-```bash
-# Reset local development database and KV
-make reset-local
-
-# Reset production (remote) database and KV
-# WARNING: This deletes ALL production data! Requires explicit 'YES' confirmation.
-make reset-remote
-```
-
-## Deployment
-
-### Backend (Cloudflare Workers)
-
-```bash
-# Set production secrets
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-
-# Update FRONTEND_URL and WORKER_URL in wrangler.toml [vars] to production URLs
-
-# Deploy
-make deploy-worker
-```
-
-### Frontend (Cloudflare Pages)
-
-```bash
-# Set VITE_API_URL in packages/web/.env.production to your Worker URL
-make deploy-web
-```
-
-Or use the [Cloudflare Pages dashboard](https://dash.cloudflare.com/?to=/:account/pages) for automatic deployments from your Git repo.
 
 ## Environment Variables
 
