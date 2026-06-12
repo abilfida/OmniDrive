@@ -85,14 +85,7 @@ The backend and frontend communicate via REST API. In development, Vite's dev se
 
 ## Getting Started
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/abilfida/omnidrive.git
-cd omnidrive
-```
-
-### 2. Setup Google OAuth Credentials
+### 1. Setup Google OAuth Credentials
 
 Before running the deployment wizard, ensure you have a Google OAuth App configured:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
@@ -100,13 +93,15 @@ Before running the deployment wizard, ensure you have a Google OAuth App configu
 3. Add `http://localhost:8787/api/auth/google/callback` as an authorized redirect URI (if running locally) or your production domain callback.
 4. Keep the Client ID and Client Secret handy.
 
-### 3. Run the Interactive Setup
+### 2. Run the Interactive Setup (Quickstart)
 
-Omnidrive includes a fully automated deployment wizard that configures your environment, sets up databases, and starts the application for you:
+Omnidrive includes a fully automated deployment wizard that configures your environment, sets up databases, and starts the application for you. You can run it directly via remote script:
 
 ```bash
-./deploy.sh
+curl -fsSL https://raw.githubusercontent.com/abilfida/omnidrive/main/deploy.sh | bash
 ```
+
+*(This script will automatically clone the repository if it's not present in the current directory).*
 
 Follow the prompts to select your deployment target:
 - **💻 Local Development**: Automatically provisions local D1/KV databases, generates secrets, and starts `npm run dev`.

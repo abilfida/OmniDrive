@@ -85,14 +85,7 @@ Backend dan frontend berkomunikasi via REST API. Saat development, dev server Vi
 
 ## Memulai
 
-### 1. Clone Repositori
-
-```bash
-git clone https://github.com/abilfida/omnidrive.git
-cd omnidrive
-```
-
-### 2. Siapkan Kredensial Google OAuth
+### 1. Siapkan Kredensial Google OAuth
 
 Sebelum menjalankan wizard instalasi, pastikan kamu sudah mengonfigurasi Google OAuth App:
 1. Buka [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
@@ -100,13 +93,15 @@ Sebelum menjalankan wizard instalasi, pastikan kamu sudah mengonfigurasi Google 
 3. Tambahkan `http://localhost:8787/api/auth/google/callback` sebagai authorized redirect URI (jika lokal) atau callback domain production kamu.
 4. Simpan Client ID dan Client Secret.
 
-### 3. Jalankan Setup Interaktif
+### 2. Jalankan Setup Interaktif (Quickstart)
 
-Omnidrive dilengkapi dengan wizard instalasi otomatis yang mengatur environment, menyiapkan database, dan menjalankan aplikasi untuk kamu:
+Omnidrive dilengkapi dengan wizard instalasi otomatis yang mengatur environment, menyiapkan database, dan menjalankan aplikasi untuk kamu. Kamu dapat menjalankannya langsung melalui remote script:
 
 ```bash
-./deploy.sh
+curl -fsSL https://raw.githubusercontent.com/abilfida/omnidrive/main/deploy.sh | bash
 ```
+
+*(Script ini akan secara otomatis mengkloning repositori jika belum ada di direktori saat ini).*
 
 Ikuti panduan di layar untuk memilih target deployment kamu:
 - **💻 Local Development**: Otomatis menyiapkan database D1/KV lokal, menghasilkan secret, dan menjalankan `npm run dev`.
