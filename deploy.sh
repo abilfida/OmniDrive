@@ -25,4 +25,9 @@ echo "Installing dependencies..."
 npm install --quiet --no-fund --no-audit
 
 # Hand off to the Node.js interactive CLI
-node scripts/onboard-deploy.mjs "$@"
+if [ -t 1 ]; then
+    # Connect stdin to the terminal so interactive prompts work over curl | bash
+    node scripts/onboard-deploy.mjs "$@" < /dev/tty
+else
+    node scripts/onboard-deploy.mjs "$@"
+fi
