@@ -1,6 +1,5 @@
 import { intro, outro, select, isCancel, cancel } from '@clack/prompts';
 import pc from 'picocolors';
-import { execSync } from 'child_process';
 
 function checkCancel(val) {
   if (isCancel(val)) {
