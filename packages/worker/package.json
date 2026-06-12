@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --outdir=dist",
+    "build:node": "esbuild src/node-server.ts --bundle --platform=node --outfile=dist/node-server.cjs --external:better-sqlite3",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -13,12 +14,20 @@
     "db:reset:remote": "node scripts/reset.mjs --remote"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.4",
     "bcryptjs": "^3.0.3",
-    "hono": "^4.7.0"
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "hono": "^4.7.0",
+    "node-cron": "^4.2.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250530.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.3",
+    "@types/node-cron": "^3.0.11",
+    "esbuild": "^0.27.7",
     "vitest": "^3.2.0",
     "wrangler": "^4.14.0"
   }
