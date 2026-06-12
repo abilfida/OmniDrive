@@ -33,6 +33,31 @@ function checkCancel(val) {
   return val;
 }
 
+async function getOAuthCredentials() {
+  const useOAuth = checkCancel(await confirm({
+    message: 'Do you want to configure Google OAuth Credentials now? (You can skip this if you plan to use a Service Account later)',
+    initialValue: true,
+  }));
+
+  if (!useOAuth) return { clientId: '', clientSecret: '' };
+
+  const clientId = checkCancel(await text({
+    message: 'Enter your Google OAuth Client ID:',
+    validate(value) {
+      if (value.length === 0) return 'Client ID is required';
+    }
+  }));
+
+  const clientSecret = checkCancel(await text({
+    message: 'Enter your Google OAuth Client Secret:',
+    validate(value) {
+      if (value.length === 0) return 'Client Secret is required';
+    }
+  }));
+
+  return { clientId, clientSecret };
+}
+
 async function main() {
   intro(pc.inverse(' Welcome to Omnidrive Deployment Wizard '));
 
@@ -79,29 +104,7 @@ async function main() {
       }
     }));
 
-    const useOAuth = checkCancel(await confirm({
-      message: 'Do you want to configure Google OAuth Credentials now? (You can skip this if you plan to use a Service Account later)',
-      initialValue: true,
-    }));
-
-    let clientId = '';
-    let clientSecret = '';
-
-    if (useOAuth) {
-      clientId = checkCancel(await text({
-        message: 'Enter your Google OAuth Client ID:',
-        validate(value) {
-          if (value.length === 0) return 'Client ID is required';
-        }
-      }));
-
-      clientSecret = checkCancel(await text({
-        message: 'Enter your Google OAuth Client Secret:',
-        validate(value) {
-          if (value.length === 0) return 'Client Secret is required';
-        }
-      }));
-    }
+    const { clientId, clientSecret } = await getOAuthCredentials();
 
     const s = spinner();
     s.start('Generating secrets and configuring environment...');
@@ -125,29 +128,7 @@ async function main() {
       runCmd('npx wrangler login');
     }
 
-    const useOAuth = checkCancel(await confirm({
-      message: 'Do you want to configure Google OAuth Credentials now? (You can skip this if you plan to use a Service Account later)',
-      initialValue: true,
-    }));
-
-    let clientId = '';
-    let clientSecret = '';
-
-    if (useOAuth) {
-      clientId = checkCancel(await text({
-        message: 'Enter your Google OAuth Client ID:',
-        validate(value) {
-          if (value.length === 0) return 'Client ID is required';
-        }
-      }));
-
-      clientSecret = checkCancel(await text({
-        message: 'Enter your Google OAuth Client Secret:',
-        validate(value) {
-          if (value.length === 0) return 'Client Secret is required';
-        }
-      }));
-    }
+    const { clientId, clientSecret } = await getOAuthCredentials();
 
     const s = spinner();
     s.start('Provisioning Cloudflare resources (D1 & KV)...');
@@ -194,8 +175,8 @@ async function main() {
     const tokenEncryptionKey = generateSecret(32);
 
     // Push secrets
-    runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
-    runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml`);
+    if (clientId) runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
+    if (clientSecret) runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml`);
     runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml`);
     runCmdSilent(`echo "${tokenEncryptionKey}" | npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml`);
 
@@ -221,29 +202,7 @@ async function main() {
     }
 
     if (proceedWithEnv) {
-      const useOAuth = checkCancel(await confirm({
-        message: 'Do you want to configure Google OAuth Credentials now? (You can skip this if you plan to use a Service Account later)',
-        initialValue: true,
-      }));
-
-      let clientId = '';
-      let clientSecret = '';
-
-      if (useOAuth) {
-        clientId = checkCancel(await text({
-          message: 'Enter your Google OAuth Client ID:',
-          validate(value) {
-            if (value.length === 0) return 'Client ID is required';
-          }
-        }));
-
-        clientSecret = checkCancel(await text({
-          message: 'Enter your Google OAuth Client Secret:',
-          validate(value) {
-            if (value.length === 0) return 'Client Secret is required';
-          }
-        }));
-      }
+      const { clientId, clientSecret } = await getOAuthCredentials();
 
       const s1 = spinner();
       s1.start('Setting up local environment...');
