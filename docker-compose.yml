@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: packages/web/Dockerfile
     ports:
-      - "8080:80"
+      - "${PORT:-8080}:80"
     restart: unless-stopped
     depends_on:
       - worker
@@ -22,6 +22,8 @@ services:
     environment:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
     volumes:
       - worker-data:/app/packages/worker/.wrangler
     restart: unless-stopped

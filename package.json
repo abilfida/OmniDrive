@@ -22,7 +22,10 @@
     "test": "npm run test -w packages/worker"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.5.1",
     "concurrently": "^9.1.0",
+    "dotenv": "^17.4.2",
+    "picocolors": "^1.1.1",
     "typescript": "^5.7.0"
   }
 }
