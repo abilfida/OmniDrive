@@ -24,5 +24,16 @@ WORKDIR /app/packages/worker
 # Initialize D1 SQLite database (Optional pre-creation step to ensure the dir exists)
 RUN mkdir -p .wrangler/state/v3/d1
 
+# Create a startup script to map OS environment variables to Wrangler's .dev.vars
+RUN echo '#!/bin/sh' > start.sh && \
+    echo 'echo "FRONTEND_URL=$FRONTEND_URL" > .dev.vars' >> start.sh && \
+    echo 'echo "WORKER_URL=$WORKER_URL" >> .dev.vars' >> start.sh && \
+    echo 'echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .dev.vars' >> start.sh && \
+    echo 'echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .dev.vars' >> start.sh && \
+    echo 'echo "JWT_SECRET=$JWT_SECRET" >> .dev.vars' >> start.sh && \
+    echo 'echo "TOKEN_ENCRYPTION_KEY=$TOKEN_ENCRYPTION_KEY" >> .dev.vars' >> start.sh && \
+    echo 'exec npm run dev -- --ip 0.0.0.0 --port 8787' >> start.sh && \
+    chmod +x start.sh
+
 # Run the worker via wrangler dev
-CMD ["npm", "run", "dev", "--", "--ip", "0.0.0.0", "--port", "8787"]
+CMD ["./start.sh"]
