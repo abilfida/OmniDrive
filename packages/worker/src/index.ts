@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { AppContext, Env } from './types/env';
 import { corsMiddleware } from './middleware/cors';
-import { errorHandler } from './middleware/error-handler';
 import { securityHeaders } from './middleware/security-headers';
 import { csrfGuard } from './middleware/csrf-guard';
 import { rateLimiter } from './middleware/rate-limiter';
@@ -24,12 +23,21 @@ export const app = new Hono<AppContext>({ strict: false });
 // Global middleware (order matters)
 app.use('*', securityHeaders);
 app.use('*', corsMiddleware());
-app.use('*', errorHandler);
 app.use('/api/*', csrfGuard);
 
+import { AppError } from './middleware/error-handler';
+
+app.onError((err, c) => {
+  console.error('Unhandled error:', err);
+  const isAppError = err instanceof AppError || err.name === 'AppError';
+  const status = isAppError ? (err as any).status : 500;
+  const message = isAppError ? err.message : 'Internal server error';
+  return c.json({ error: message }, status as any);
+});
+
 // Rate limiters — applied before auth to protect login/register
-app.use('/api/auth/login', rateLimiter({ windowMs: 60_000, maxRequests: 5 }));
-app.use('/api/auth/register', rateLimiter({ windowMs: 600_000, maxRequests: 3 }));
+app.use('/api/auth/login', rateLimiter({ windowMs: 60_000, maxRequests: 10 }));
+app.use('/api/auth/register', rateLimiter({ windowMs: 600_000, maxRequests: 10 }));
 app.use('/api/shared/:id/verify', rateLimiter({
   windowMs: 60_000,
   maxRequests: 5,
