@@ -140,7 +140,7 @@ async function main() {
     // Create D1 if not exists
     let d1Output = runCmdSilent('npx wrangler d1 create omnidrive-prod');
     if (d1Output) {
-      const d1Match = d1Output.match(/database_id = "([^"]+)"/);
+      const d1Match = d1Output.match(/(?:database_id[=:]|"database_id":)\s*"([^"]+)"/);
       if (d1Match && d1Match[1] && fs.existsSync(wranglerPath)) {
         let toml = fs.readFileSync(wranglerPath, 'utf8');
         toml = toml.replace(/database_id = "[^"]+"/, `database_id = "${d1Match[1]}"`);
@@ -153,7 +153,7 @@ async function main() {
     // Create KV if not exists
     let kvOutput = runCmdSilent('npx wrangler kv namespace create KV_PROD');
     if (kvOutput) {
-      const kvMatch = kvOutput.match(/id = "([^"]+)"/);
+      const kvMatch = kvOutput.match(/(?:id[=:]|"id":)\s*"([^"]+)"/);
       if (kvMatch && kvMatch[1] && fs.existsSync(wranglerPath)) {
         let toml = fs.readFileSync(wranglerPath, 'utf8');
         // Look for KV id replacement
@@ -170,15 +170,17 @@ async function main() {
     const tokenEncryptionKey = generateSecret(32);
 
     // Push secrets
-    runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID`);
-    runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET`);
-    runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET`);
-    runCmdSilent(`echo "${tokenEncryptionKey}" | npx wrangler secret put TOKEN_ENCRYPTION_KEY`);
+    runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
+    runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml`);
+    runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml`);
+    runCmdSilent(`echo "${tokenEncryptionKey}" | npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml`);
 
     s.stop('Resources and secrets provisioned.');
 
     console.log(pc.cyan('Deploying to Cloudflare (Worker & Web)...'));
     // Make sure Make is available
+    console.log(pc.cyan('Running remote D1 migrations...'));
+    runCmd('npx wrangler d1 execute omnidrive --remote --file=packages/worker/src/db/schema.sql -c packages/worker/wrangler.toml');
     runCmd('make deploy-worker');
     runCmd('make deploy-web');
     
