@@ -1,4 +1,4 @@
-import { intro, outro, select, text, isCancel, cancel, spinner } from '@clack/prompts';
+import { intro, outro, select, text, isCancel, cancel, spinner, confirm } from '@clack/prompts';
 import pc from 'picocolors';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -22,7 +22,7 @@ function runCmdSilent(cmd) {
 }
 
 function generateSecret(length = 32) {
-  return crypto.randomBytes(length).toString('hex').slice(0, length);
+  return crypto.randomBytes(length / 2).toString('hex');
 }
 
 function checkCancel(val) {
@@ -52,9 +52,31 @@ async function main() {
       process.exit(1);
     }
 
+    const dockerRunning = runCmdSilent('docker info');
+    if (!dockerRunning) {
+      cancel('Docker daemon is not running. Please start Docker and try again.');
+      process.exit(1);
+    }
+
+    if (fs.existsSync('.env')) {
+      const overwrite = checkCancel(await confirm({
+        message: '.env file already exists. Do you want to overwrite it?'
+      }));
+      if (!overwrite) {
+        cancel('Setup cancelled. .env file not overwritten.');
+        process.exit(0);
+      }
+    }
+
     const port = checkCancel(await text({
       message: 'What port should the web server run on?',
       initialValue: '3000',
+      validate(value) {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 1 || num > 65535) {
+          return 'Port must be a valid number between 1 and 65535';
+        }
+      }
     }));
 
     const clientId = checkCancel(await text({
