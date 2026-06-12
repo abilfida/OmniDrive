@@ -54,10 +54,11 @@ async function getOAuthCredentials() {
 
 async function getBaseUrls(target, defaultPort = '3000') {
   let defaultFrontend = 'http://localhost:' + defaultPort;
-  let defaultWorker = 'http://localhost:8787';
+  let defaultWorker = 'http://localhost:' + defaultPort;
   
   if (target === 'local') {
     defaultFrontend = 'http://localhost:5173';
+    defaultWorker = 'http://localhost:8787';
   } else if (target === 'cloudflare') {
     defaultFrontend = 'https://omnidrive.pages.dev';
     defaultWorker = 'https://omnidrive-api.serunix.workers.dev';
