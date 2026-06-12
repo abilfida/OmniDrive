@@ -128,14 +128,41 @@ async function main() {
     const s = spinner();
     s.start('Provisioning Cloudflare resources (D1 & KV)...');
 
+    const wranglerPath = 'packages/worker/wrangler.toml';
+    const wranglerExamplePath = 'packages/worker/wrangler.example.toml';
+    
+    if (!fs.existsSync(wranglerPath)) {
+      if (fs.existsSync(wranglerExamplePath)) {
+        fs.copyFileSync(wranglerExamplePath, wranglerPath);
+      }
+    }
+
     // Create D1 if not exists
     let d1Output = runCmdSilent('npx wrangler d1 create omnidrive-prod');
-    // Note: in a real robust script we'd parse the output and update wrangler.toml, 
-    // but for this implementation we rely on the user having done `cp wrangler.example.toml wrangler.toml` 
-    // or we can just append it. For now, let's keep it simple.
+    if (d1Output) {
+      const d1Match = d1Output.match(/database_id = "([^"]+)"/);
+      if (d1Match && d1Match[1] && fs.existsSync(wranglerPath)) {
+        let toml = fs.readFileSync(wranglerPath, 'utf8');
+        toml = toml.replace(/database_id = "[^"]+"/, `database_id = "${d1Match[1]}"`);
+        fs.writeFileSync(wranglerPath, toml);
+      }
+    } else {
+      console.log(pc.yellow('\nD1 creation failed or already exists. Proceeding with existing wrangler.toml...'));
+    }
     
     // Create KV if not exists
     let kvOutput = runCmdSilent('npx wrangler kv namespace create KV_PROD');
+    if (kvOutput) {
+      const kvMatch = kvOutput.match(/id = "([^"]+)"/);
+      if (kvMatch && kvMatch[1] && fs.existsSync(wranglerPath)) {
+        let toml = fs.readFileSync(wranglerPath, 'utf8');
+        // Look for KV id replacement
+        toml = toml.replace(/id = "[^"]+"/, `id = "${kvMatch[1]}"`);
+        fs.writeFileSync(wranglerPath, toml);
+      }
+    } else {
+      console.log(pc.yellow('\nKV creation failed or already exists. Proceeding with existing wrangler.toml...'));
+    }
 
     s.message('Pushing secrets to Cloudflare...');
     
