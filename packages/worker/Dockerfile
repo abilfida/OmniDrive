@@ -24,6 +24,9 @@ WORKDIR /app/packages/worker
 # Initialize D1 SQLite database (Optional pre-creation step to ensure the dir exists)
 RUN mkdir -p .wrangler/state/v3/d1
 
+# Ensure wrangler.toml exists for wrangler dev
+RUN cp wrangler.example.toml wrangler.toml
+
 # Create a startup script to map OS environment variables to Wrangler's .dev.vars
 RUN echo '#!/bin/sh' > start.sh && \
     echo 'echo "FRONTEND_URL=$FRONTEND_URL" > .dev.vars' >> start.sh && \

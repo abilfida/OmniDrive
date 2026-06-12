@@ -48,6 +48,9 @@ RUN npm ci
 # Now copy the source code
 COPY packages/worker ./packages/worker
 
+# Ensure wrangler.toml exists for wrangler dev
+RUN cp packages/worker/wrangler.example.toml packages/worker/wrangler.toml
+
 # Copy entrypoint script
 COPY start-unified.sh /start-unified.sh
 RUN chmod +x /start-unified.sh
