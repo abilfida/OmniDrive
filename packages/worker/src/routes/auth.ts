@@ -87,6 +87,11 @@ authRouter.use('*', authGuard);
 
 authRouter.get('/google', async (c) => {
   const env = c.env;
+  
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new AppError(400, 'Google OAuth is not configured. Please login with username and password.');
+  }
+
   const redirectUri = `${env.WORKER_URL}/api/auth/callback`;
   const scope = 'openid email profile https://www.googleapis.com/auth/drive';
 
