@@ -35,27 +35,53 @@ function checkCancel(val) {
 
 async function getOAuthCredentials() {
   const useOAuth = checkCancel(await confirm({
-    message: 'Do you want to configure Google OAuth Credentials now? (You can skip this if you plan to use a Service Account later)',
+    message: 'Do you want to configure Google OAuth Credentials now? (Optional - you can skip if using a Service Account later)',
     initialValue: true,
   }));
 
   if (!useOAuth) return { clientId: '', clientSecret: '' };
 
   const clientId = checkCancel(await text({
-    message: 'Enter your Google OAuth Client ID:',
-    validate(value) {
-      if (value.length === 0) return 'Client ID is required';
-    }
+    message: 'Enter your Google OAuth Client ID (Optional, press enter to skip):',
   }));
 
   const clientSecret = checkCancel(await text({
-    message: 'Enter your Google OAuth Client Secret:',
-    validate(value) {
-      if (value.length === 0) return 'Client Secret is required';
-    }
+    message: 'Enter your Google OAuth Client Secret (Optional, press enter to skip):',
   }));
 
   return { clientId, clientSecret };
+}
+
+async function getBaseUrls(target, defaultPort = '3000') {
+  let defaultFrontend = 'http://localhost:' + defaultPort;
+  let defaultWorker = 'http://localhost:8787';
+  
+  if (target === 'local') {
+    defaultFrontend = 'http://localhost:5173';
+  } else if (target === 'cloudflare') {
+    defaultFrontend = 'https://omnidrive.pages.dev';
+    defaultWorker = 'https://omnidrive-api.serunix.workers.dev';
+  }
+
+  const frontendUrl = checkCancel(await text({
+    message: 'Enter your Frontend URL (Mandatory):',
+    initialValue: defaultFrontend,
+    validate(value) {
+      if (value.length === 0) return 'Frontend URL is required';
+      if (!value.startsWith('http')) return 'Must start with http:// or https://';
+    }
+  }));
+
+  const workerUrl = checkCancel(await text({
+    message: 'Enter your Worker API URL (Mandatory):',
+    initialValue: defaultWorker,
+    validate(value) {
+      if (value.length === 0) return 'Worker URL is required';
+      if (!value.startsWith('http')) return 'Must start with http:// or https://';
+    }
+  }));
+
+  return { frontendUrl, workerUrl };
 }
 
 async function main() {
@@ -112,6 +138,7 @@ async function main() {
       }
     }));
 
+    const { frontendUrl, workerUrl } = await getBaseUrls('docker', port);
     const { clientId, clientSecret } = await getOAuthCredentials();
 
     const s = spinner();
@@ -120,7 +147,7 @@ async function main() {
     const jwtSecret = generateSecret(32);
     const tokenEncryptionKey = generateSecret(32);
 
-    const envContent = `PORT=${port}\nGOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
+    const envContent = `PORT=${port}\nFRONTEND_URL=${frontendUrl}\nWORKER_URL=${workerUrl}\nGOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
     fs.writeFileSync('.env', envContent);
 
     s.stop('Environment configured in .env file.');
@@ -140,6 +167,7 @@ async function main() {
       runCmd('npx wrangler login');
     }
 
+    const { frontendUrl, workerUrl } = await getBaseUrls('cloudflare');
     const { clientId, clientSecret } = await getOAuthCredentials();
 
     const s = spinner();
@@ -187,6 +215,8 @@ async function main() {
     const tokenEncryptionKey = generateSecret(32);
 
     // Push secrets
+    runCmdSilent(`echo "${frontendUrl}" | npx wrangler secret put FRONTEND_URL -c packages/worker/wrangler.toml`);
+    runCmdSilent(`echo "${workerUrl}" | npx wrangler secret put WORKER_URL -c packages/worker/wrangler.toml`);
     if (clientId) runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
     if (clientSecret) runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml`);
     runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml`);
@@ -214,6 +244,7 @@ async function main() {
     }
 
     if (proceedWithEnv) {
+      const { frontendUrl, workerUrl } = await getBaseUrls('local');
       const { clientId, clientSecret } = await getOAuthCredentials();
 
       const s1 = spinner();
@@ -222,7 +253,7 @@ async function main() {
       const jwtSecret = generateSecret(32);
       const tokenEncryptionKey = generateSecret(32);
 
-      const devVarsContent = `GOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
+      const devVarsContent = `FRONTEND_URL=${frontendUrl}\nWORKER_URL=${workerUrl}\nGOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
       
       if (!fs.existsSync('packages/worker')) fs.mkdirSync('packages/worker', { recursive: true });
       fs.writeFileSync('packages/worker/.dev.vars', devVarsContent);

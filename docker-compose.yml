@@ -24,6 +24,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - JWT_SECRET=${JWT_SECRET}
       - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - WORKER_URL=${WORKER_URL}
     volumes:
       - worker-data:/app/packages/worker/.wrangler
     restart: unless-stopped

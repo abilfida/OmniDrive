@@ -21,8 +21,6 @@ binding = "KV"
 id = "<your-kv-namespace-id>"
 
 [vars]
-FRONTEND_URL = "http://localhost:5173"
-WORKER_URL = "http://localhost:8787"
 
 # Security secrets — set via:
 #   npx wrangler secret put JWT_SECRET
