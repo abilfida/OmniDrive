@@ -43,27 +43,21 @@ const nodeEnv: Env = {
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || 'dev-encryption-key-32-bytes-long!',
 };
 
-// Inject the environment into every request
-app.use('*', async (c, next) => {
-  c.env = nodeEnv;
-  await next();
-});
-
 // Serve static React files from /usr/share/nginx/html or local web/dist
 const staticDir = process.env.STATIC_DIR || path.join(process.cwd(), '../web/dist');
 app.use('/*', serveStatic({ root: staticDir }));
 
+// Construct a dummy execution context for waitUntil
+const dummyCtx = {
+  waitUntil: (promise: Promise<any>) => promise.catch(console.error),
+  passThroughOnException: () => {}
+} as any;
+
 // Setup Cron Schedule
 cron.schedule('*/30 * * * *', () => {
   console.log('Executing cron schedule...');
-  // Construct a dummy execution context
-  const ctx = {
-    waitUntil: (promise: Promise<any>) => promise.catch(console.error),
-    passThroughOnException: () => {}
-  } as any;
-  
   if (worker.scheduled) {
-    worker.scheduled({ cron: '*/30 * * * *', type: 'cron', scheduledTime: Date.now() }, nodeEnv, ctx);
+    worker.scheduled({ cron: '*/30 * * * *', type: 'cron', scheduledTime: Date.now() }, nodeEnv, dummyCtx);
   }
 });
 
@@ -71,6 +65,6 @@ const port = parseInt(process.env.PORT || '8080', 10);
 console.log(`Starting Node server on port ${port}...`);
 
 serve({
-  fetch: app.fetch,
+  fetch: (req) => app.fetch(req, nodeEnv, dummyCtx),
   port
 });
