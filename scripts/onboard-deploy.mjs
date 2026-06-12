@@ -184,8 +184,39 @@ async function main() {
     
     outro(pc.green('✅ Deployed successfully to Cloudflare!'));
   } else if (target === 'local') {
-    // Local flow
-    outro(pc.green('Local development selected! (To be implemented)'));
+    const clientId = checkCancel(await text({
+      message: 'Enter your Google OAuth Client ID:',
+      validate(value) { if (!value) return 'Required'; }
+    }));
+
+    const clientSecret = checkCancel(await text({
+      message: 'Enter your Google OAuth Client Secret:',
+      validate(value) { if (!value) return 'Required'; }
+    }));
+
+    const s = spinner();
+    s.start('Setting up local environment...');
+
+    const jwtSecret = generateSecret(32);
+    const tokenEncryptionKey = generateSecret(32);
+
+    const devVarsContent = `GOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
+    
+    if (!fs.existsSync('packages/worker')) fs.mkdirSync('packages/worker', { recursive: true });
+    fs.writeFileSync('packages/worker/.dev.vars', devVarsContent);
+
+    if (!fs.existsSync('packages/web')) fs.mkdirSync('packages/web', { recursive: true });
+    fs.writeFileSync('packages/web/.env', \`VITE_API_URL=\\n\`);
+
+    s.message('Running local D1 migrations...');
+    runCmdSilent('npx wrangler d1 execute omnidrive --local --file=packages/worker/src/db/schema.sql');
+
+    s.stop('Local environment ready.');
+
+    console.log(pc.cyan('Starting local development server...'));
+    runCmd('npm run dev');
+    
+    outro(pc.green('✅ Local server stopped.'));
   }
 }
 
