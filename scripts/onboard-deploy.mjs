@@ -83,6 +83,14 @@ async function main() {
       process.exit(1);
     }
 
+    const buildStrategy = checkCancel(await select({
+      message: 'How do you want to run Docker Compose?',
+      options: [
+        { value: 'prebuilt', label: '📦 Use pre-built Docker image (Fastest)' },
+        { value: 'source', label: '🛠️ Build from source' },
+      ],
+    }));
+
     if (fs.existsSync('.env')) {
       const overwrite = checkCancel(await confirm({
         message: '.env file already exists. Do you want to overwrite it?'
@@ -118,7 +126,11 @@ async function main() {
     s.stop('Environment configured in .env file.');
 
     console.log(pc.cyan('Starting Docker Compose...'));
-    runCmd('docker compose up -d --build');
+    if (buildStrategy === 'source') {
+      runCmd('docker compose up -d --build');
+    } else {
+      runCmd('docker compose up -d');
+    }
     
     outro(pc.green(`✅ Deployed successfully! Open http://localhost:${port}`));
   } else if (target === 'cloudflare') {
