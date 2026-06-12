@@ -7,8 +7,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_WEB: ${{ github.repository_owner }}/omnidrive-web
-  IMAGE_NAME_WORKER: ${{ github.repository_owner }}/omnidrive-worker
   IMAGE_NAME_UNIFIED: ${{ github.repository_owner }}/omnidrive-unified
 
 jobs:
@@ -25,8 +23,6 @@ jobs:
       - name: Set lowercase repository owner and image names
         run: |
           echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
-          echo "IMAGE_NAME_WEB=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-web" >> $GITHUB_ENV
-          echo "IMAGE_NAME_WORKER=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-worker" >> $GITHUB_ENV
           echo "IMAGE_NAME_UNIFIED=${GITHUB_REPOSITORY_OWNER,,}/omnidrive-unified" >> $GITHUB_ENV
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
@@ -40,38 +36,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Web
-        id: meta-web
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}
-          tags: type=semver,pattern={{version}}
-
-      - name: Build and push Web image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: packages/web/Dockerfile
-          push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
-
-      - name: Extract metadata (tags, labels) for Worker
-        id: meta-worker
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WORKER }}
-          tags: type=semver,pattern={{version}}
-
-      - name: Build and push Worker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: packages/worker/Dockerfile
-          push: true
-          tags: ${{ steps.meta-worker.outputs.tags }}
-          labels: ${{ steps.meta-worker.outputs.labels }}
 
       - name: Extract metadata (tags, labels) for Unified
         id: meta-unified
