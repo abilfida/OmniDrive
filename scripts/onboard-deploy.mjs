@@ -219,7 +219,7 @@ async function main() {
       fs.writeFileSync('packages/worker/.dev.vars', devVarsContent);
 
       if (!fs.existsSync('packages/web')) fs.mkdirSync('packages/web', { recursive: true });
-      fs.writeFileSync('packages/web/.env', \`VITE_API_URL=\\n\`);
+      fs.writeFileSync('packages/web/.env', `VITE_API_URL=\n`);
 
       s1.stop('Local environment files created.');
     }
