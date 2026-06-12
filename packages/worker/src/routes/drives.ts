@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { setCookie } from 'hono/cookie';
+import { AppError } from '../middleware/error-handler';
 import type { AppContext } from '../types/env';
 import { authGuard } from '../middleware/auth-guard';
 import { GoogleDriveService } from '../services/google-drive';
@@ -42,6 +43,11 @@ drivesRouter.use('*', authGuard);
 
 drivesRouter.get('/connect', (c) => {
   const env = c.env;
+  
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new AppError(400, 'Google OAuth is not configured. Please use a Service Account JSON to connect your drives.');
+  }
+
   const redirectUri = `${env.WORKER_URL}/api/auth/callback`;
   const scope = 'openid email profile https://www.googleapis.com/auth/drive';
 
