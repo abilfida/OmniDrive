@@ -47,6 +47,20 @@ const nodeEnv: Env = {
 const staticDir = process.env.STATIC_DIR || path.join(process.cwd(), '../web/dist');
 app.use('/*', serveStatic({ root: staticDir }));
 
+// SPA Fallback: Serve index.html for all non-API routes that didn't match a static file
+app.get('*', (c) => {
+  if (c.req.path.startsWith('/api')) {
+    return c.notFound();
+  }
+  const indexPath = path.join(staticDir, 'index.html');
+  try {
+    const indexHtml = fs.readFileSync(indexPath, 'utf-8');
+    return c.html(indexHtml);
+  } catch (err) {
+    return c.text('index.html not found in ' + staticDir, 404);
+  }
+});
+
 // Construct a dummy execution context for waitUntil
 const dummyCtx = {
   waitUntil: (promise: Promise<any>) => promise.catch(console.error),
