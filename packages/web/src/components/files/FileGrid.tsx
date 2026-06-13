@@ -393,11 +393,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     if (isTrashView) {
                       return;
                     }
-                    if (native && file.webViewLink) {
-                      window.open(file.webViewLink, '_blank', 'noopener,noreferrer');
-                    } else {
-                      onPreviewFile?.(file);
-                    }
+                    onPreviewFile?.(file);
                   }}
                   onMouseEnter={() => {
                     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
@@ -574,11 +570,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                   if (isTrashView) {
                     return;
                   }
-                  if (native && file.webViewLink) {
-                    window.open(file.webViewLink, '_blank', 'noopener,noreferrer');
-                  } else {
-                    onPreviewFile?.(file);
-                  }
+                  onPreviewFile?.(file);
                 }}
                 onMouseEnter={() => {
                   if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
