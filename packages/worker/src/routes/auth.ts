@@ -147,8 +147,8 @@ authRouter.get('/callback', async (c) => {
   const targetUserId = c.get('userId');
   const db = env.DB;
 
-  await db.prepare('UPDATE users SET google_id = ?, email = COALESCE(email, ?), name = COALESCE(name, ?), avatar_url = COALESCE(avatar_url, ?) WHERE id = ?')
-    .bind(googleUser.id, googleUser.email, googleUser.name, googleUser.picture, targetUserId).run();
+  await db.prepare('UPDATE users SET google_id = ? WHERE id = ?')
+    .bind(googleUser.id, targetUserId).run();
 
   let drive = await db.prepare('SELECT id FROM drive_accounts WHERE google_account_id = ? AND user_id = ?').bind(googleUser.id, targetUserId).first<{ id: string }>();
   if (!drive) {
