@@ -79,12 +79,14 @@ async function performInitialSync(
   const { files, folders } = await driveService.listAllFilesAndFolders(drive.id);
 
   for (const folder of folders) {
+    if (getIsShuttingDown()) return;
     let parentId = folder.parents?.[0] ?? null;
     if (parentId === rootFolderId) parentId = null;
     await upsertDriveFolder(db, drive, folder, parentId);
   }
 
   for (const file of files) {
+    if (getIsShuttingDown()) return;
     let parentId = file.parents?.[0] ?? 'root';
     if (parentId === rootFolderId) parentId = 'root';
     await upsertFile(db, drive, file, parentId);
@@ -105,9 +107,11 @@ async function performIncrementalSync(
   let hasMore = true;
 
   while (hasMore) {
+    if (getIsShuttingDown()) return currentToken;
     const response = await driveService.listChanges(drive.id, currentToken);
 
     for (const change of response.changes) {
+      if (getIsShuttingDown()) return currentToken;
       const isFolder = change.file?.mimeType === 'application/vnd.google-apps.folder';
 
       if (change.removed || change.file?.trashed) {
@@ -250,6 +254,8 @@ export async function runScheduledSync(env: {
   GOOGLE_CLIENT_SECRET: string;
   TOKEN_ENCRYPTION_KEY: string;
 }): Promise<void> {
+  if (getIsShuttingDown()) return;
+
   const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.TOKEN_ENCRYPTION_KEY);
 
   const rows = await env.DB.prepare("SELECT * FROM drive_accounts WHERE type = 'oauth'").all();
