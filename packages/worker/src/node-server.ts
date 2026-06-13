@@ -79,10 +79,11 @@ const dummyCtx = {
 } as any;
 
 // Setup Cron Schedule
-cron.schedule('*/30 * * * *', () => {
+const CRON_SCHEDULE = '*/30 * * * *';
+cron.schedule(CRON_SCHEDULE, () => {
   console.log('Executing cron schedule...');
   if (worker.scheduled) {
-    worker.scheduled({ cron: '*/30 * * * *', type: 'cron', scheduledTime: Date.now() }, nodeEnv, dummyCtx);
+    worker.scheduled({ cron: CRON_SCHEDULE, type: 'cron', scheduledTime: Date.now() }, nodeEnv, dummyCtx);
   }
 });
 
@@ -94,20 +95,14 @@ const server = serve({
   port
 });
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Initiating graceful shutdown...');
+function shutdown(signal: string) {
+  console.log(`${signal} received. Initiating graceful shutdown...`);
   setShuttingDown();
   server.close(() => {
     console.log('HTTP server closed. Exiting process.');
     process.exit(0);
   });
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Initiating graceful shutdown...');
-  setShuttingDown();
-  server.close(() => {
-    console.log('HTTP server closed. Exiting process.');
-    process.exit(0);
-  });
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

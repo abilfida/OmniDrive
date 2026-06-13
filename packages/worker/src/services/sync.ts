@@ -1,4 +1,8 @@
-export let isShuttingDown = false;
+let isShuttingDown = false;
+
+export function getIsShuttingDown() {
+  return isShuttingDown;
+}
 
 export function setShuttingDown(): void {
   isShuttingDown = true;
