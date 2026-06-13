@@ -9,6 +9,7 @@ import { mapDriveRow, mapDriveFolderRow, mapFileRow } from '../types';
 import { generateId } from '../lib/id';
 import type { BreadcrumbItem } from '../types';
 import { decryptOrPassthrough } from '../lib/crypto';
+import { generatePKCE } from '../lib/pkce';
 
 export async function buildDriveBreadcrumb(db: D1Database, driveId: string, googleFolderId: string): Promise<BreadcrumbItem[]> {
   const path: BreadcrumbItem[] = [];
@@ -41,7 +42,7 @@ export const drivesRouter = new Hono<AppContext>({ strict: false });
 
 drivesRouter.use('*', authGuard);
 
-drivesRouter.get('/connect', (c) => {
+drivesRouter.get('/connect', async (c) => {
   const env = c.env;
   
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -60,8 +61,14 @@ drivesRouter.get('/connect', (c) => {
   authUrl.searchParams.append('prompt', 'select_account consent');
 
   const state = crypto.randomUUID();
+  const { codeVerifier, codeChallenge } = await generatePKCE();
+
+  await env.KV.put(`oauth_state:${state}`, JSON.stringify({ codeVerifier }), { expirationTtl: 600 });
   setCookie(c, 'oauth_state', state, { path: '/', httpOnly: true, secure: true, maxAge: 60 * 5 });
+  
   authUrl.searchParams.append('state', state);
+  authUrl.searchParams.append('code_challenge', codeChallenge);
+  authUrl.searchParams.append('code_challenge_method', 'S256');
 
   return c.redirect(authUrl.toString());
 });
