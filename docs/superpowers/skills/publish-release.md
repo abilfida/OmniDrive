@@ -19,5 +19,5 @@ Once approved:
 1. Bump version: `npm version patch --no-git-tag-version` (or minor/major based on user request).
 2. Stage docs: `git add package.json package-lock.json CHANGELOG.md README.md README.id.md`
 3. Commit: `git commit -m "chore(release): vX.Y.Z"`
-4. Tag: `git tag vX.Y.Z`
+4. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
 5. Remind user to push: `git push --follow-tags`
