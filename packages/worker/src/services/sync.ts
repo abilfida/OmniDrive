@@ -14,6 +14,8 @@ import { GoogleDriveService, type GDriveFile, type GDriveFolder } from './google
 import { generateId } from '../lib/id';
 import type { Env } from '../types/env';
 
+export const activeSyncs = new Set<string>();
+
 export async function syncDriveFolder(_env: Env, _driveId: string, _folderId: string, _userId: string): Promise<void> {
   // implemented by another task
 }
@@ -34,12 +36,13 @@ export async function syncDriveAccount(
     const syncState = await db
       .prepare('SELECT * FROM sync_state WHERE drive_account_id = ?')
       .bind(drive.id)
-      .first();
+      .first<{ change_token: string | null; next_page_token: string | null }>();
 
-    let changeToken = syncState?.change_token as string | null;
+    let changeToken = syncState?.change_token;
+    let nextPageToken = syncState?.next_page_token;
 
     if (!changeToken) {
-      await performInitialSync(drive, db, driveService);
+      await performInitialSync(drive, db, driveService, nextPageToken ?? undefined);
       changeToken = await driveService.getStartPageToken(drive.id);
     } else {
       changeToken = await performIncrementalSync(drive, db, changeToken, driveService);
@@ -47,7 +50,7 @@ export async function syncDriveAccount(
 
     await db
       .prepare(
-        "INSERT INTO sync_state (drive_account_id, status, last_synced_at, change_token) VALUES (?, 'idle', CURRENT_TIMESTAMP, ?) ON CONFLICT(drive_account_id) DO UPDATE SET status = 'idle', last_synced_at = CURRENT_TIMESTAMP, change_token = excluded.change_token"
+        "INSERT INTO sync_state (drive_account_id, status, last_synced_at, change_token, next_page_token) VALUES (?, 'idle', CURRENT_TIMESTAMP, ?, NULL) ON CONFLICT(drive_account_id) DO UPDATE SET status = 'idle', last_synced_at = CURRENT_TIMESTAMP, change_token = excluded.change_token, next_page_token = NULL"
       )
       .bind(drive.id, changeToken)
       .run();
@@ -71,25 +74,39 @@ export async function syncDriveAccount(
 async function performInitialSync(
   drive: DriveAccount,
   db: D1Database,
-  driveService: GoogleDriveService
+  driveService: GoogleDriveService,
+  startPageToken?: string
 ): Promise<void> {
-  console.log(`Initial sync for ${drive.email} — crawling Drive root`);
+  console.log(`Initial sync for ${drive.email} — chunk processing`);
 
   const rootFolderId = await driveService.getRootFolderId(drive.id);
-  const { files, folders } = await driveService.listAllFilesAndFolders(drive.id);
+  const iterator = driveService.iterateAllFilesAndFolders(drive.id, startPageToken);
 
-  for (const folder of folders) {
-    if (getIsShuttingDown()) return;
-    let parentId = folder.parents?.[0] ?? null;
-    if (parentId === rootFolderId) parentId = null;
-    await upsertDriveFolder(db, drive, folder, parentId);
-  }
+  for await (const chunk of iterator) {
+    if (getIsShuttingDown()) {
+      console.log(`Sync interrupted by shutdown for ${drive.email}. State saved.`);
+      break;
+    }
 
-  for (const file of files) {
-    if (getIsShuttingDown()) return;
-    let parentId = file.parents?.[0] ?? 'root';
-    if (parentId === rootFolderId) parentId = 'root';
-    await upsertFile(db, drive, file, parentId);
+    for (const folder of chunk.folders) {
+      let parentId = folder.parents?.[0] ?? null;
+      if (parentId === rootFolderId) parentId = null;
+      await upsertDriveFolder(db, drive, folder, parentId);
+    }
+
+    for (const file of chunk.files) {
+      let parentId = file.parents?.[0] ?? 'root';
+      if (parentId === rootFolderId) parentId = 'root';
+      await upsertFile(db, drive, file, parentId);
+    }
+
+    // Save checkpoint
+    if (chunk.nextPageToken) {
+      await db
+        .prepare('UPDATE sync_state SET next_page_token = ? WHERE drive_account_id = ?')
+        .bind(chunk.nextPageToken, drive.id)
+        .run();
+    }
   }
 }
 
@@ -264,10 +281,20 @@ export async function runScheduledSync(env: {
   console.log(`Syncing ${driveAccounts.length} drive accounts`);
 
   await Promise.allSettled(
-    driveAccounts.map((drive) =>
-      syncDriveAccount(drive, env.DB, env.KV, driveService).catch((err) => {
+    driveAccounts.map(async (drive) => {
+      if (activeSyncs.has(drive.id)) {
+        console.log(`Skipping sync for ${drive.email} as it is already syncing.`);
+        return;
+      }
+
+      activeSyncs.add(drive.id);
+      try {
+        await syncDriveAccount(drive, env.DB, env.KV, driveService);
+      } catch (err) {
         console.error(`Sync error for ${drive.email}:`, err);
-      })
-    )
+      } finally {
+        activeSyncs.delete(drive.id);
+      }
+    })
   );
 }
