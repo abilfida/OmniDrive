@@ -16,21 +16,45 @@ export class D1PreparedStatementWrapper {
   }
 
   async first<T = any>(): Promise<T | null> {
-    const stmt = this.db.prepare(this.query);
-    const result = stmt.get(...this.params) as T | undefined;
-    return result || null;
+    return new Promise((resolve, reject) => {
+      setImmediate(() => {
+        try {
+          const stmt = this.db.prepare(this.query);
+          const result = stmt.get(...this.params) as T | undefined;
+          resolve(result || null);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
   }
 
   async all<T = any>(): Promise<{ results: T[] }> {
-    const stmt = this.db.prepare(this.query);
-    const results = stmt.all(...this.params) as T[];
-    return { results };
+    return new Promise((resolve, reject) => {
+      setImmediate(() => {
+        try {
+          const stmt = this.db.prepare(this.query);
+          const results = stmt.all(...this.params) as T[];
+          resolve({ results });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
   }
 
   async run(): Promise<{ success: boolean }> {
-    const stmt = this.db.prepare(this.query);
-    stmt.run(...this.params);
-    return { success: true };
+    return new Promise((resolve, reject) => {
+      setImmediate(() => {
+        try {
+          const stmt = this.db.prepare(this.query);
+          stmt.run(...this.params);
+          resolve({ success: true });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
   }
 }
 
