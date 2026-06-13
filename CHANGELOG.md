@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.12] - 2026-06-14
+
+### Changed
+
+- Unified file double-click behavior to always display the preview modal, including for Google Workspace native files (Docs, Sheets).
+- Changed the 'Users' sidebar menu icon to a more relevant user management icon (`UserCog`).
+- Stopped auto-assigning Google profile data (email, name, avatar) to user accounts when linking a Google Drive.
+
+### Removed
+
+- Removed the placeholder 'Computers' menu from the sidebar.
+- Removed the 'New' button from the sidebar.
+
 ## [0.8.10] - 2026-06-14
 
 ### Added
