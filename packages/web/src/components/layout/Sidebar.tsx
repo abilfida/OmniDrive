@@ -37,16 +37,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 bg-surface h-full flex flex-col p-3 gap-1 flex-shrink-0">
-      {/* New button */}
-      <div className="px-1 py-2 mb-1">
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-3 bg-white text-gray-700 rounded-2xl px-5 py-3.5 shadow-sm w-max hover:shadow-md hover:bg-gray-50 transition-all font-medium ml-1 text-sm"
-        >
-          <Plus size={20} className="text-primary" />
-          New
-        </button>
-      </div>
+
 
       {/* Navigation */}
       <nav className="flex flex-col gap-0.5">
