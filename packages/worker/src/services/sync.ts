@@ -16,7 +16,7 @@ export async function syncDriveAccount(
 ): Promise<void> {
   // Update status to syncing
   await db
-    .prepare("UPDATE sync_state SET status = 'syncing', error_message = NULL WHERE drive_account_id = ?")
+    .prepare("INSERT INTO sync_state (drive_account_id, status) VALUES (?, 'syncing') ON CONFLICT(drive_account_id) DO UPDATE SET status = 'syncing', error_message = NULL")
     .bind(drive.id)
     .run();
 
@@ -37,9 +37,9 @@ export async function syncDriveAccount(
 
     await db
       .prepare(
-        "UPDATE sync_state SET change_token = ?, last_synced_at = datetime('now'), status = 'idle' WHERE drive_account_id = ?"
+        "INSERT INTO sync_state (drive_account_id, status, last_synced_at, change_token) VALUES (?, 'idle', CURRENT_TIMESTAMP, ?) ON CONFLICT(drive_account_id) DO UPDATE SET status = 'idle', last_synced_at = CURRENT_TIMESTAMP, change_token = excluded.change_token"
       )
-      .bind(changeToken, drive.id)
+      .bind(drive.id, changeToken)
       .run();
 
     try {
@@ -52,8 +52,8 @@ export async function syncDriveAccount(
     console.error(`Sync failed for ${drive.email}:`, message);
 
     await db
-      .prepare("UPDATE sync_state SET status = 'error', error_message = ? WHERE drive_account_id = ?")
-      .bind(message, drive.id)
+      .prepare("INSERT INTO sync_state (drive_account_id, status, error_message) VALUES (?, 'error', ?) ON CONFLICT(drive_account_id) DO UPDATE SET status = 'error', error_message = excluded.error_message")
+      .bind(drive.id, message)
       .run();
   }
 }

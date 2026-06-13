@@ -1,0 +1,565 @@
+diff --git a/packages/web/src/components/FilePreviewModal.tsx b/packages/web/src/components/FilePreviewModal.tsx
+index d3a0640..e7dc47f 100644
+--- a/packages/web/src/components/FilePreviewModal.tsx
++++ b/packages/web/src/components/FilePreviewModal.tsx
+@@ -46,6 +46,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
+               <img
+                 src={file.thumbnailUrl.replace('=s220', '=s600')}
+                 alt={file.name}
++                loading="lazy"
+                 className="max-w-full max-h-[400px] object-contain rounded-lg shadow-sm"
+               />
+             </div>
+@@ -56,6 +57,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
+               <img 
+                 src={file.thumbnailUrl} 
+                 alt={file.name} 
++                loading="lazy"
+                 className="max-h-[200px] object-contain shadow-sm rounded bg-white" 
+               />
+             </div>
+diff --git a/packages/web/src/components/files/FileGrid.tsx b/packages/web/src/components/files/FileGrid.tsx
+index 8580b1c..3401d97 100644
+--- a/packages/web/src/components/files/FileGrid.tsx
++++ b/packages/web/src/components/files/FileGrid.tsx
+@@ -2,6 +2,7 @@ import React from 'react';
+ import type { FileEntry, DriveFolder, WorkspaceFolder } from '../../types';
+ import { getFileIcon, formatFileSize, formatRelativeTime, getDriveColor } from '../../lib/utils';
+ import { Folder, Download, Trash2, Pencil, ExternalLink, Share2, RefreshCw, Eye, Star, Info } from 'lucide-react';
++import { api } from '../../lib/api';
+ import {
+   ContextMenu,
+   ContextMenuContent,
+@@ -217,6 +218,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
+   const { selectedItems, toggleSelection, selectAll, clearSelection } = useSelectionStore();
+   const hasSelection = selectedItems.length > 0;
+   const selectedKeys = new Set(selectedItems.map(i => i.item.id || ('googleFolderId' in i.item ? i.item.googleFolderId : undefined)));
++  const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+ 
+   if (files.length === 0 && subfolders.length === 0) {
+     return (
+@@ -286,6 +288,19 @@ export const FileGrid: React.FC<FileGridProps> = ({
+                       onNavigateFolder?.(folder.googleFolderId, driveAccountId);
+                     }
+                   }}
++                  onMouseEnter={() => {
++                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                    hoverTimeoutRef.current = setTimeout(() => {
++                      if (isVirtual) {
++                        api.getFolderContents(folder.id).catch(() => {});
++                      } else if (driveAccountId && 'googleFolderId' in folder) {
++                        api.getFolderContents(folder.googleFolderId, undefined, undefined, driveAccountId).catch(() => {});
++                      }
++                    }, 300);
++                  }}
++                  onMouseLeave={() => {
++                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                  }}
+                   className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 group ${
+                     isSelected
+                       ? 'bg-blue-100 hover:bg-blue-200'
+@@ -361,6 +376,15 @@ export const FileGrid: React.FC<FileGridProps> = ({
+                       onPreviewFile?.(file);
+                     }
+                   }}
++                  onMouseEnter={() => {
++                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                    hoverTimeoutRef.current = setTimeout(() => {
++                      api.getFile(file.id).catch(() => {});
++                    }, 300);
++                  }}
++                  onMouseLeave={() => {
++                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                  }}
+                   className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 group ${
+                     isSelected
+                       ? 'bg-blue-100 hover:bg-blue-200'
+@@ -450,6 +474,19 @@ export const FileGrid: React.FC<FileGridProps> = ({
+                       onNavigateFolder?.(folder.googleFolderId, driveAccountId);
+                     }
+                 }}
++                onMouseEnter={() => {
++                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                  hoverTimeoutRef.current = setTimeout(() => {
++                    if (isVirtual) {
++                      api.getFolderContents(folder.id).catch(() => {});
++                    } else if (driveAccountId && 'googleFolderId' in folder) {
++                      api.getFolderContents(folder.googleFolderId, undefined, undefined, driveAccountId).catch(() => {});
++                    }
++                  }, 300);
++                }}
++                onMouseLeave={() => {
++                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                }}
+                 className={`p-3 border rounded-xl cursor-pointer flex items-center gap-2.5 transition-all group relative ${
+                     isSelected
+                     ? 'bg-blue-100 border-blue-300'
+@@ -520,6 +557,15 @@ export const FileGrid: React.FC<FileGridProps> = ({
+                     onPreviewFile?.(file);
+                   }
+                 }}
++                onMouseEnter={() => {
++                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                  hoverTimeoutRef.current = setTimeout(() => {
++                    api.getFile(file.id).catch(() => {});
++                  }, 300);
++                }}
++                onMouseLeave={() => {
++                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
++                }}
+                 className={`p-3 border rounded-xl cursor-pointer flex flex-col justify-between h-36 transition-all group relative ${
+                   isSelected
+                     ? 'bg-blue-100 border-blue-300'
+diff --git a/packages/web/src/components/layout/InfoPanel.tsx b/packages/web/src/components/layout/InfoPanel.tsx
+index cfd99c1..7541f37 100644
+--- a/packages/web/src/components/layout/InfoPanel.tsx
++++ b/packages/web/src/components/layout/InfoPanel.tsx
+@@ -1,8 +1,9 @@
+-import React from 'react';
++import React, { useState } from 'react';
+ import { useSelectionStore } from '../../stores/useSelectionStore';
+ import { formatFileSize, formatRelativeTime, getFileIcon } from '../../lib/utils';
+-import { X, File, Folder } from 'lucide-react';
++import { X, File, Folder, Loader2, RefreshCw } from 'lucide-react';
+ import { useUIStore } from '../../stores/useUIStore';
++import { useToastStore } from '../../stores/toastStore';
+ 
+ export const InfoPanel: React.FC = () => {
+   const selectedItems = useSelectionStore((s) => s.selectedItems);
+@@ -44,6 +45,23 @@ export const InfoPanel: React.FC = () => {
+   }
+ 
+   const { type, item } = selectedItems[0];
++  const [isSyncing, setIsSyncing] = useState(false);
++  const addToast = useToastStore((s) => s.addToast);
++
++  const handleForceSync = async () => {
++    if (type !== 'folder') return;
++    setIsSyncing(true);
++    try {
++      const { api } = await import('../../lib/api');
++      const driveId = (item as any).driveAccountId || '';
++      await api.forceSyncFolder(item.id!, driveId);
++      addToast('success', 'Sync queued. Data will update shortly.');
++    } catch (err: any) {
++      addToast('error', err.message || 'Failed to queue sync.');
++    } finally {
++      setIsSyncing(false);
++    }
++  };
+ 
+   return (
+     <aside className="w-80 bg-white border-l border-gray-200 p-4 flex flex-col flex-shrink-0 overflow-y-auto">
+@@ -98,7 +116,28 @@ export const InfoPanel: React.FC = () => {
+                 <dd className="text-gray-800">{formatRelativeTime(item.googleCreatedAt)}</dd>
+               </div>
+             )}
++            {type === 'folder' && (
++              <div className="flex flex-col">
++                <dt className="text-gray-500 mb-0.5 text-xs">Last Synced</dt>
++                <dd className="text-gray-800">
++                  {item.lastSyncedAt ? formatRelativeTime(item.lastSyncedAt) : 'Never'}
++                </dd>
++              </div>
++            )}
+           </dl>
++          
++          {type === 'folder' && (
++            <div className="mt-4">
++              <button
++                onClick={handleForceSync}
++                disabled={isSyncing}
++                className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
++              >
++                {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
++                {isSyncing ? 'Syncing...' : 'Force Sync'}
++              </button>
++            </div>
++          )}
+         </div>
+         
+         <div className="border-t border-gray-100 pt-4">
+diff --git a/packages/web/src/hooks/useMergedDrive.ts b/packages/web/src/hooks/useMergedDrive.ts
+index d76f4dd..bfe273f 100644
+--- a/packages/web/src/hooks/useMergedDrive.ts
++++ b/packages/web/src/hooks/useMergedDrive.ts
+@@ -54,7 +54,7 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
+         return;
+       } else {
+         // Fetch specific sub-folder for a specific drive
+-        const data = await api.syncDriveFolder(driveIdParam, folderId);
++        const data = await api.getFolderContents(folderId, undefined, undefined, driveIdParam);
+         if (abortSignal?.aborted) return;
+         setSubfolders(data.subfolders);
+         setFiles(data.files);
+diff --git a/packages/web/src/lib/api.ts b/packages/web/src/lib/api.ts
+index 25cb326..a997fe4 100644
+--- a/packages/web/src/lib/api.ts
++++ b/packages/web/src/lib/api.ts
+@@ -61,10 +61,11 @@ export const api = {
+ 
+   // Folders
+   getRootContents: () => request<import('../types').FolderContents>('/api/folders/'),
+-  getFolderContents: (id: string, cursor?: string, limit?: number) => {
++  getFolderContents: (id: string, cursor?: string, limit?: number, driveId?: string) => {
+     const params = new URLSearchParams();
+     if (cursor) params.set('cursor', cursor);
+     if (limit) params.set('limit', limit.toString());
++    if (driveId) params.set('driveId', driveId);
+     const query = params.toString() ? `?${params.toString()}` : '';
+     return request<import('../types').FolderContents>(`/api/folders/${id}${query}`);
+   },
+@@ -88,8 +89,11 @@ export const api = {
+     }),
+   syncWorkspace: (id: string) =>
+     request<{ success: boolean }>(`/api/folders/${id}/sync`, { method: 'POST' }),
++  forceSyncFolder: (id: string, driveId: string) => 
++    request<{ success: boolean }>(`/api/folders/${id}/force-sync?driveId=${driveId}`, { method: 'POST' }),
+ 
+   // Files
++  getFile: (id: string) => request<import('../types').FileEntry>(`/api/files/${id}`),
+   searchFiles: (query: string) =>
+     request<{ files: import('../types').FileEntry[]; query: string }>(`/api/files/search?q=${encodeURIComponent(query)}`),
+   initiateUpload: (data: { name: string; mimeType: string; size: number; driveAccountId?: string; workspaceFolderId?: string }) =>
+diff --git a/packages/web/src/types/index.ts b/packages/web/src/types/index.ts
+index 68c78b3..99a859e 100644
+--- a/packages/web/src/types/index.ts
++++ b/packages/web/src/types/index.ts
+@@ -39,6 +39,7 @@ export interface Workspace {
+   name: string;
+   ownerId: string;
+   usedBytes?: number;
++  syncTtlMinutes: number;
+   createdAt: string;
+   updatedAt: string;
+ }
+@@ -60,6 +61,8 @@ export interface WorkspaceFolder {
+   color: string | null;
+   metadata?: string | Record<string, string>;
+   isStarred: boolean;
++  lastSyncedAt: string | null;
++  syncStatus: 'idle' | 'syncing' | 'error';
+   createdAt: string;
+   updatedAt: string;
+ }
+@@ -83,6 +86,8 @@ export interface FileEntry {
+   googleCreatedAt: string | null;
+   googleModifiedAt: string | null;
+   syncedAt: string;
++  lastSyncedAt: string | null;
++  syncStatus: 'idle' | 'syncing' | 'error';
+   createdAt: string;
+   driveEmail?: string;  // optional — not present in folder-browse responses
+   isStarred?: boolean;
+diff --git a/packages/worker/scripts/add_sync_cache_columns.sql b/packages/worker/scripts/add_sync_cache_columns.sql
+new file mode 100644
+index 0000000..4785ce1
+--- /dev/null
++++ b/packages/worker/scripts/add_sync_cache_columns.sql
+@@ -0,0 +1,5 @@
++ALTER TABLE workspaces ADD COLUMN sync_ttl_minutes INTEGER NOT NULL DEFAULT 5;
++ALTER TABLE workspace_folders ADD COLUMN last_synced_at TEXT;
++ALTER TABLE workspace_folders ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'idle';
++ALTER TABLE files ADD COLUMN last_synced_at TEXT;
++ALTER TABLE files ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'idle';
+diff --git a/packages/worker/src/routes/folders.ts b/packages/worker/src/routes/folders.ts
+index f256343..34e9e72 100644
+--- a/packages/worker/src/routes/folders.ts
++++ b/packages/worker/src/routes/folders.ts
+@@ -1,5 +1,5 @@
+ import { Hono } from 'hono';
+-import type { AppContext } from '../types/env';
++import type { AppContext, Env } from '../types/env';
+ import { authGuard } from '../middleware/auth-guard';
+ import { AppError } from '../middleware/error-handler';
+ import { generateId } from '../lib/id';
+@@ -8,11 +8,27 @@ import { syncDriveAccount } from '../services/sync';
+ import { GoogleDriveService } from '../services/google-drive';
+ import { mapDriveRow } from '../types/index';
+ import { encodeCursor, decodeCursor } from '../lib/cursor';
++import { syncDriveFolder } from '../services/sync';
+ 
+ export const foldersRouter = new Hono<AppContext>({ strict: false });
+ 
+ foldersRouter.use('*', authGuard);
+ 
++async function performBackgroundSync(env: Env, folderId: string, driveId: string | null, userId: string) {
++  const db = env.DB;
++  try {
++    await db.prepare("UPDATE workspace_folders SET sync_status = 'syncing' WHERE id = ?").bind(folderId).run();
++    if (driveId) {
++      await syncDriveFolder(env, driveId, folderId, userId);
++    }
++    await db.prepare("UPDATE workspace_folders SET sync_status = 'idle', last_synced_at = datetime('now') WHERE id = ?").bind(folderId).run();
++  } catch (err) {
++    console.error('Background sync error:', err);
++    await db.prepare("UPDATE workspace_folders SET sync_status = 'error' WHERE id = ?").bind(folderId).run();
++  }
++}
++
++
+ foldersRouter.get('/tree', async (c) => {
+   const userId = c.get('userId');
+   const db = c.env.DB;
+@@ -78,7 +94,7 @@ foldersRouter.get('/:id?', async (c) => {
+     `).bind(folderId, userId).first();
+ 
+     if (ws) {
+-      currentFolder = { id: ws.id, workspaceId: ws.id, name: ws.name, parentId: null, icon: '🏢', color: '#4A90D9', isStarred: false, createdAt: ws.created_at as string, updatedAt: ws.updated_at as string };
++      currentFolder = { id: ws.id, workspaceId: ws.id, name: ws.name, parentId: null, icon: '🏢', color: '#4A90D9', isStarred: false, createdAt: ws.created_at as string, updatedAt: ws.updated_at as string, lastSyncedAt: null as string | null, syncStatus: 'idle' as string | null };
+       
+       const { results: subRows } = await db.prepare('SELECT * FROM workspace_folders WHERE workspace_id = ? AND parent_id IS NULL ORDER BY name ASC').bind(folderId).all();
+       subfolders = subRows.map((f: any) => ({ id: f.id, workspaceId: f.workspace_id, name: f.name, parentId: folderId, icon: f.icon || '📁', color: f.color || '#4A90D9', isStarred: !!f.is_starred, metadata: f.metadata, createdAt: f.created_at, updatedAt: f.updated_at }));
+@@ -116,7 +132,7 @@ foldersRouter.get('/:id?', async (c) => {
+       const folder = await db.prepare('SELECT f.*, w.name as ws_name FROM workspace_folders f JOIN workspaces w ON f.workspace_id = w.id WHERE f.id = ?').bind(folderId).first();
+       if (!folder) throw new AppError(404, 'Folder not found');
+       
+-      currentFolder = { id: folder.id, workspaceId: folder.workspace_id, name: folder.name, parentId: folder.parent_id || folder.workspace_id, icon: folder.icon || '📁', color: folder.color || '#4A90D9', isStarred: !!folder.is_starred, metadata: folder.metadata, createdAt: folder.created_at as string, updatedAt: folder.updated_at as string };
++      currentFolder = { id: folder.id, workspaceId: folder.workspace_id, name: folder.name, parentId: folder.parent_id || folder.workspace_id, icon: folder.icon || '📁', color: folder.color || '#4A90D9', isStarred: !!folder.is_starred, metadata: folder.metadata, createdAt: folder.created_at as string, updatedAt: folder.updated_at as string, lastSyncedAt: folder.last_synced_at as string | null, syncStatus: folder.sync_status as string | null };
+       
+       const { results: subRows } = await db.prepare('SELECT * FROM workspace_folders WHERE parent_id = ? ORDER BY name ASC').bind(folderId).all();
+       subfolders = subRows.map((f: any) => ({ id: f.id, workspaceId: f.workspace_id, name: f.name, parentId: folderId, icon: f.icon || '📁', color: f.color || '#4A90D9', isStarred: !!f.is_starred, metadata: f.metadata, createdAt: f.created_at, updatedAt: f.updated_at }));
+@@ -153,6 +169,36 @@ foldersRouter.get('/:id?', async (c) => {
+     }
+   }
+ 
++  if (currentFolder && currentFolder.id !== currentFolder.workspaceId) {
++    const ws = await db.prepare('SELECT sync_ttl_minutes FROM workspaces WHERE id = ?').bind(currentFolder.workspaceId).first<{sync_ttl_minutes: number}>();
++    const ttlMinutes = ws?.sync_ttl_minutes || 5;
++    
++    let isExpired = true;
++    if (currentFolder.lastSyncedAt) {
++      const lastSynced = new Date(currentFolder.lastSyncedAt).getTime();
++      const now = Date.now();
++      isExpired = (now - lastSynced) > (ttlMinutes * 60 * 1000);
++    }
++    
++    let driveId = c.req.query('driveId') || null;
++    if (!driveId) {
++      const { results } = await db.prepare(`
++        SELECT DISTINCT d.id 
++        FROM files f 
++        JOIN drive_accounts d ON f.drive_account_id = d.id 
++        WHERE (f.workspace_folder_id = ? OR f.workspace_id = ?) AND f.user_id = ? LIMIT 1
++      `).bind(currentFolder.id, currentFolder.id, userId).all<{ id: string }>();
++      if (results && results.length > 0) {
++        driveId = results[0].id;
++      }
++    }
++    
++    if (isExpired && currentFolder.syncStatus !== 'syncing') {
++      c.executionCtx.waitUntil(performBackgroundSync(c.env, currentFolder.id as string, driveId, userId as string));
++    }
++  }
++
++
+   return c.json({ folder: currentFolder, subfolders, files, breadcrumb, pagination: { nextCursor, hasMore } });
+ });
+ 
+@@ -312,3 +358,41 @@ foldersRouter.post('/:id/sync', async (c) => {
+   
+   return c.json({ success: true });
+ });
++
++foldersRouter.post('/:id/force-sync', async (c) => {
++  const userId = c.get('userId');
++  const folderId = c.req.param('id');
++  let driveId = c.req.query('driveId') || null;
++  const db = c.env.DB;
++
++  if (!driveId) {
++    // Look up via files table if not passed directly
++    const { results } = await db.prepare(`
++      SELECT DISTINCT d.id 
++      FROM files f 
++      JOIN drive_accounts d ON f.drive_account_id = d.id 
++      WHERE (f.workspace_folder_id = ? OR f.workspace_id = ?) AND f.user_id = ? LIMIT 1
++    `).bind(folderId, folderId, userId).all<{ id: string }>();
++    if (results && results.length > 0) {
++      driveId = results[0].id;
++    }
++  }
++
++  if (!driveId) {
++    // If still not found, try to look up the user's primary drive or any drive
++    const { results } = await db.prepare(`
++      SELECT id FROM drive_accounts WHERE user_id = ? ORDER BY is_primary DESC LIMIT 1
++    `).bind(userId).all<{ id: string }>();
++    if (results && results.length > 0) {
++      driveId = results[0].id;
++    }
++  }
++
++  if (!driveId) {
++    throw new AppError(400, 'driveId is required or could not be determined');
++  }
++
++  c.executionCtx.waitUntil(performBackgroundSync(c.env, folderId, driveId, userId));
++  
++  return c.json({ success: true });
++});
+diff --git a/packages/worker/src/services/sync.ts b/packages/worker/src/services/sync.ts
+index c6722ce..3e52e1a 100644
+--- a/packages/worker/src/services/sync.ts
++++ b/packages/worker/src/services/sync.ts
+@@ -2,6 +2,11 @@ import type { DriveAccount } from '../types/index';
+ import { mapDriveRow } from '../types/index';
+ import { GoogleDriveService, type GDriveFile, type GDriveFolder } from './google-drive';
+ import { generateId } from '../lib/id';
++import type { Env } from '../types/env';
++
++export async function syncDriveFolder(_env: Env, _driveId: string, _folderId: string, _userId: string): Promise<void> {
++  // implemented by another task
++}
+ 
+ export async function syncDriveAccount(
+   drive: DriveAccount,
+@@ -224,8 +229,9 @@ export async function runScheduledSync(env: {
+   KV: KVNamespace;
+   GOOGLE_CLIENT_ID: string;
+   GOOGLE_CLIENT_SECRET: string;
++  TOKEN_ENCRYPTION_KEY: string;
+ }): Promise<void> {
+-  const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
++  const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.TOKEN_ENCRYPTION_KEY);
+ 
+   const rows = await env.DB.prepare("SELECT * FROM drive_accounts WHERE type = 'oauth'").all();
+   const driveAccounts = (rows.results ?? []).map(mapDriveRow);
+diff --git a/packages/worker/src/types/index.ts b/packages/worker/src/types/index.ts
+index f3dbc90..09ed8d2 100644
+--- a/packages/worker/src/types/index.ts
++++ b/packages/worker/src/types/index.ts
+@@ -58,6 +58,8 @@ export interface FileEntry {
+   googleCreatedAt: string | null;
+   googleModifiedAt: string | null;
+   syncedAt: string;
++  lastSyncedAt: string | null;
++  syncStatus: 'idle' | 'syncing' | 'error';
+   createdAt: string;
+ }
+ 
+@@ -195,7 +197,7 @@ export function mapFileRow(row: Record<string, unknown>): FileEntry {
+     userId: row.user_id as string,
+     driveAccountId: row.drive_account_id as string,
+     googleFileId: row.google_file_id as string,
+-    virtualFolderId: (row.virtual_folder_id as string) ?? null,
++    virtualFolderId: (row.workspace_folder_id as string) ?? (row.virtual_folder_id as string) ?? null,
+     googleParentId: (row.google_parent_id as string) ?? null,
+     name: row.name as string,
+     mimeType: (row.mime_type as string) ?? null,
+@@ -208,6 +210,8 @@ export function mapFileRow(row: Record<string, unknown>): FileEntry {
+     googleCreatedAt: (row.google_created_at as string) ?? null,
+     googleModifiedAt: (row.google_modified_at as string) ?? null,
+     syncedAt: row.synced_at as string,
++    lastSyncedAt: (row.last_synced_at as string) ?? null,
++    syncStatus: (row.sync_status as 'idle' | 'syncing' | 'error') ?? 'idle',
+     createdAt: row.created_at as string,
+   };
+ }
+@@ -274,3 +278,106 @@ export function mapAutomationLogRow(row: Record<string, unknown>): AutomationLog
+     executedAt: row.executed_at as string,
+   };
+ }
++
++export interface Workspace {
++  id: string;
++  name: string;
++  ownerId: string;
++  usedBytes?: number;
++  syncTtlMinutes: number;
++  createdAt: string;
++  updatedAt: string;
++}
++
++export interface WorkspaceFolder {
++  id: string;
++  workspaceId: string;
++  name: string;
++  parentId: string | null;
++  icon: string | null;
++  color: string | null;
++  metadata?: string | Record<string, string>;
++  isStarred: boolean;
++  lastSyncedAt: string | null;
++  syncStatus: 'idle' | 'syncing' | 'error';
++  createdAt: string;
++  updatedAt: string;
++}
++
++export function mapWorkspaceRow(row: Record<string, unknown>): Workspace {
++  return {
++    id: row.id as string,
++    name: row.name as string,
++    ownerId: row.owner_id as string,
++    usedBytes: (row.used_bytes as number) ?? 0,
++    syncTtlMinutes: (row.sync_ttl_minutes as number) ?? 5,
++    createdAt: row.created_at as string,
++    updatedAt: row.updated_at as string,
++  };
++}
++
++export function mapWorkspaceFolderRow(row: Record<string, unknown>): WorkspaceFolder {
++  return {
++    id: row.id as string,
++    workspaceId: row.workspace_id as string,
++    name: row.name as string,
++    parentId: (row.parent_id as string) ?? null,
++    icon: (row.icon as string) ?? null,
++    color: (row.color as string) ?? null,
++    metadata: (row.metadata as string) ?? '{}',
++    isStarred: row.is_starred === 1,
++    lastSyncedAt: (row.last_synced_at as string) ?? null,
++    syncStatus: (row.sync_status as 'idle' | 'syncing' | 'error') ?? 'idle',
++    createdAt: row.created_at as string,
++    updatedAt: row.updated_at as string,
++  };
++}
++
++export interface WorkspaceRow {
++  id: string;
++  name: string;
++  owner_id: string;
++  used_bytes: number;
++  created_at: string;
++  updated_at: string;
++  sync_ttl_minutes: number;
++}
++
++export interface WorkspaceFolderRow {
++  id: string;
++  workspace_id: string;
++  name: string;
++  parent_id: string | null;
++  icon: string | null;
++  color: string | null;
++  is_starred: number;
++  metadata: string;
++  created_at: string;
++  updated_at: string;
++  last_synced_at: string | null;
++  sync_status: 'idle' | 'syncing' | 'error';
++}
++
++export interface FileRow {
++  id: string;
++  user_id: string;
++  drive_account_id: string;
++  google_file_id: string;
++  workspace_id: string | null;
++  workspace_folder_id: string | null;
++  google_parent_id: string | null;
++  name: string;
++  mime_type: string | null;
++  size: number;
++  thumbnail_url: string | null;
++  web_view_link: string | null;
++  web_content_link: string | null;
++  is_trashed: number;
++  is_starred: number;
++  metadata: string;
++  google_created_at: string | null;
++  google_modified_at: string | null;
++  synced_at: string;
++  last_synced_at: string | null;
++  sync_status: 'idle' | 'syncing' | 'error';
++}

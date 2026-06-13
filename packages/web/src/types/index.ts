@@ -23,6 +23,8 @@ export interface DriveAccount {
   usedQuota: number;
   freeSpace: number;
   usagePercent: number;
+  syncStatus?: 'idle' | 'syncing' | 'error';
+  lastSyncedAt?: string | null;
   quotaUpdatedAt: string | null;
   createdAt: string;
 }

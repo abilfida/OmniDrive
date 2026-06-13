@@ -14,6 +14,8 @@ interface DriveAccountCardProps {
 export function DriveAccountCard({ drive, index, onSync, onDisconnect }: DriveAccountCardProps) {
   const [syncing, setSyncing] = useState(false);
   const color = getDriveColor(index);
+  
+  const isSyncing = syncing || drive.syncStatus === 'syncing';
 
   const handleSync = async () => {
     setSyncing(true);
@@ -36,16 +38,21 @@ export function DriveAccountCard({ drive, index, onSync, onDisconnect }: DriveAc
               {drive.type === 'service_account' ? 'Service Account' : 'OAuth'}
               {drive.isPrimary && <span className="ml-1.5 text-blue-500 font-medium">· Primary</span>}
             </div>
+            {drive.lastSyncedAt && (
+              <div className="text-[10px] text-gray-400 mt-0.5">
+                Last synced: {new Date(drive.lastSyncedAt).toLocaleString()}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
             onClick={handleSync}
-            disabled={syncing}
+            disabled={isSyncing}
           >
-            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-            Sync
+            <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} />
+            {isSyncing ? 'Syncing...' : 'Sync'}
           </button>
           {!drive.isPrimary && (
             <button

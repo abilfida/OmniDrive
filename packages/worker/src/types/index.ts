@@ -173,6 +173,8 @@ export function mapDriveRow(row: Record<string, unknown>): DriveAccount {
     totalQuota: (row.total_quota as number) ?? 0,
     usedQuota: (row.used_quota as number) ?? 0,
     quotaUpdatedAt: (row.quota_updated_at as string) ?? null,
+    syncStatus: (row.sync_status as 'idle' | 'syncing' | 'error') ?? 'idle',
+    lastSyncedAt: (row.last_synced_at as string) ?? null,
     createdAt: row.created_at as string,
   };
 }
