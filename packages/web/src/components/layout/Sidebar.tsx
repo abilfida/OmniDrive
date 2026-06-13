@@ -14,7 +14,7 @@ import {
   Clock,
   Star,
   FolderTree,
-  Shield,
+  UserCog,
 } from 'lucide-react';
 import { formatFileSize } from '../../lib/utils';
 
@@ -76,7 +76,7 @@ export const Sidebar: React.FC = () => {
         </NavLink>
         {user?.role === 'super_admin' && (
           <NavLink to="/admin/users" className={navLinkClass}>
-            <Shield size={20} />
+            <UserCog size={20} />
             <span>Users</span>
           </NavLink>
         )}
