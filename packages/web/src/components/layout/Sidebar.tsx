@@ -66,10 +66,6 @@ export const Sidebar: React.FC = () => {
           <Users size={20} />
           <span>Shared</span>
         </NavLink>
-        <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 rounded-full cursor-pointer text-gray-700 text-sm">
-          <Monitor size={20} />
-          <span>Computers</span>
-        </div>
         <NavLink to="/workspaces" className={navLinkClass}>
           <FolderTree size={20} />
           <span>Workspaces</span>
