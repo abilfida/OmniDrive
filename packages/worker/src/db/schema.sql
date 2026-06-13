@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE TABLE IF NOT EXISTS sync_state (
     drive_account_id TEXT PRIMARY KEY REFERENCES drive_accounts(id) ON DELETE CASCADE,
     change_token     TEXT,
+    next_page_token  TEXT,
     last_synced_at   TEXT,
     status           TEXT DEFAULT 'idle',
     error_message    TEXT
