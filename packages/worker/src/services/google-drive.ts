@@ -615,4 +615,44 @@ export class GoogleDriveService {
 
     return { files: allFiles, folders: allFolders };
   }
+
+  async *iterateAllFilesAndFolders(
+    driveAccountId: string,
+    startPageToken?: string
+  ): AsyncGenerator<{ files: GDriveFile[]; folders: GDriveFolder[]; nextPageToken?: string }, void, unknown> {
+    const token = await this.getValidToken(driveAccountId);
+    const fields =
+      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+    const q = encodeURIComponent(`trashed = false`);
+
+    let pageToken: string | undefined = startPageToken;
+
+    do {
+      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=nextPageToken,${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to list folder contents: ${await response.text()}`);
+      }
+
+      const data: { files: GDriveFile[]; nextPageToken?: string } = await response.json();
+
+      const chunkFiles: GDriveFile[] = [];
+      const chunkFolders: GDriveFolder[] = [];
+
+      for (const item of data.files) {
+        if (item.mimeType === 'application/vnd.google-apps.folder') {
+          chunkFolders.push({ id: item.id, name: item.name, parents: item.parents });
+        } else if (item.mimeType !== 'application/vnd.google-apps.shortcut') {
+          chunkFiles.push(item);
+        }
+      }
+
+      yield { files: chunkFiles, folders: chunkFolders, nextPageToken: data.nextPageToken };
+      
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+  }
 }
