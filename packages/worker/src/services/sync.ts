@@ -65,14 +65,19 @@ async function performInitialSync(
 ): Promise<void> {
   console.log(`Initial sync for ${drive.email} — crawling Drive root`);
 
-  const { files, folders } = await driveService.listFolderContents(drive.id, 'root');
+  const rootFolderId = await driveService.getRootFolderId(drive.id);
+  const { files, folders } = await driveService.listAllFilesAndFolders(drive.id);
 
   for (const folder of folders) {
-    await upsertDriveFolder(db, drive, folder, null);
+    let parentId = folder.parents?.[0] ?? null;
+    if (parentId === rootFolderId) parentId = null;
+    await upsertDriveFolder(db, drive, folder, parentId);
   }
 
   for (const file of files) {
-    await upsertFile(db, drive, file, 'root');
+    let parentId = file.parents?.[0] ?? 'root';
+    if (parentId === rootFolderId) parentId = 'root';
+    await upsertFile(db, drive, file, parentId);
   }
 }
 
@@ -83,6 +88,8 @@ async function performIncrementalSync(
   driveService: GoogleDriveService
 ): Promise<string> {
   console.log(`Incremental sync for ${drive.email} from token ${pageToken}`);
+
+  const rootFolderId = await driveService.getRootFolderId(drive.id);
 
   let currentToken = pageToken;
   let hasMore = true;
@@ -113,12 +120,14 @@ async function performIncrementalSync(
 
       if (file.mimeType === 'application/vnd.google-apps.shortcut') continue;
 
-      const parentId = file.parents?.[0] ?? null;
-
       if (isFolder) {
+        let parentId = file.parents?.[0] ?? null;
+        if (parentId === rootFolderId) parentId = null;
         await upsertDriveFolder(db, drive, { id: file.id, name: file.name, parents: file.parents }, parentId);
       } else {
-        await upsertFile(db, drive, file as unknown as GDriveFile, parentId ?? 'root');
+        let parentId = file.parents?.[0] ?? 'root';
+        if (parentId === rootFolderId) parentId = 'root';
+        await upsertFile(db, drive, file as unknown as GDriveFile, parentId);
       }
     }
 

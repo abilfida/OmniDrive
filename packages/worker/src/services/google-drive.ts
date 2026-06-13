@@ -150,6 +150,18 @@ export class GoogleDriveService {
 
   // ─── Folder Operations ───
 
+  async getRootFolderId(driveAccountId: string): Promise<string> {
+    const token = await this.getValidToken(driveAccountId);
+    const response = await fetch(`${DRIVE_API}/files/root?fields=id`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get root folder ID: ${await response.text()}`);
+    }
+    const data: { id: string } = await response.json();
+    return data.id;
+  }
+
   async createFolder(
     driveAccountId: string,
     name: string,
@@ -532,6 +544,47 @@ export class GoogleDriveService {
     const fields =
       'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
     const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+
+    const allFiles: GDriveFile[] = [];
+    const allFolders: GDriveFolder[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to list folder contents: ${await response.text()}`);
+      }
+
+      const data: { files: any[]; nextPageToken?: string } = await response.json();
+      
+      for (const file of data.files) {
+        if (file.mimeType === 'application/vnd.google-apps.shortcut') continue;
+        if (file.mimeType === 'application/vnd.google-apps.folder') {
+          allFolders.push(file);
+        } else {
+          allFiles.push(file);
+        }
+      }
+      
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    return { files: allFiles, folders: allFolders };
+  }
+
+  // ─── Full Drive Contents (All files + folders recursively) ───
+
+  async listAllFilesAndFolders(
+    driveAccountId: string
+  ): Promise<{ files: GDriveFile[]; folders: GDriveFolder[] }> {
+    const token = await this.getValidToken(driveAccountId);
+    const fields =
+      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+    const q = encodeURIComponent(`trashed = false`);
 
     const allFiles: GDriveFile[] = [];
     const allFolders: GDriveFolder[] = [];

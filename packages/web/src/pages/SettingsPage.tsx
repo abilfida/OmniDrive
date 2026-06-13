@@ -15,6 +15,17 @@ export function SettingsPage() {
     fetchDrives();
   }, [fetchDrives]);
 
+  useEffect(() => {
+    const hasSyncing = drives.some(d => d.syncStatus === 'syncing');
+    if (!hasSyncing) return;
+
+    const interval = setInterval(() => {
+      fetchDrives();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [drives, fetchDrives]);
+
   const handleSync = async (id: string) => {
     try {
       await triggerSync(id);
