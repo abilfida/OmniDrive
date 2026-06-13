@@ -1,15 +1,12 @@
 import React from 'react';
 import { useUIStore } from '../../stores/useUIStore';
-import { useUploadStore } from '../../stores/uploadStore';
 import { useDriveStore } from '../../stores/driveStore';
 import { useAuthStore } from '../../stores/authStore';
 import { NavLink } from 'react-router-dom';
 import {
   HardDrive,
-  Monitor,
   Users,
   Trash2,
-  Plus,
   Settings,
   Clock,
   Star,
@@ -25,7 +22,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export const Sidebar: React.FC = () => {
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
-  const setShowModal = useUploadStore((state) => state.setShowModal);
   const { aggregate } = useDriveStore();
   const { user } = useAuthStore();
 
