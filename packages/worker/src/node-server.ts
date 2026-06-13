@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import cron from 'node-cron';
 import { app } from './index';
+import { setShuttingDown } from './services/sync';
 import worker from './index';
 import { D1DatabaseWrapper } from './polyfills/d1';
 import { KVNamespaceWrapper } from './polyfills/kv';
@@ -26,7 +27,17 @@ if (isNewDb) {
     d1.exec(fs.readFileSync(schemaPath, 'utf-8'));
     console.log('Database schema initialized.');
   }
+} else {
+  // Migration for existing DB
+  try {
+    d1.exec("ALTER TABLE sync_state ADD COLUMN next_page_token TEXT;");
+  } catch (e) {
+    // Ignore if column already exists
+  }
 }
+
+// Startup cleanup: reset stuck syncing states
+d1.exec("UPDATE sync_state SET status = 'error', error_message = 'Sync interrupted by server restart' WHERE status = 'syncing'");
 
 // Initialize KV
 const kv = new KVNamespaceWrapper(path.join(dataDir, 'kv.sqlite'));
@@ -78,7 +89,25 @@ cron.schedule('*/30 * * * *', () => {
 const port = parseInt(process.env.PORT || '8080', 10);
 console.log(`Starting Node server on port ${port}...`);
 
-serve({
+const server = serve({
   fetch: (req) => app.fetch(req, nodeEnv, dummyCtx),
   port
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Initiating graceful shutdown...');
+  setShuttingDown();
+  server.close(() => {
+    console.log('HTTP server closed. Exiting process.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received. Initiating graceful shutdown...');
+  setShuttingDown();
+  server.close(() => {
+    console.log('HTTP server closed. Exiting process.');
+    process.exit(0);
+  });
 });

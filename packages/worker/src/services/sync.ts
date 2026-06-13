@@ -1,3 +1,9 @@
+export let isShuttingDown = false;
+
+export function setShuttingDown(): void {
+  isShuttingDown = true;
+}
+
 import type { DriveAccount } from '../types/index';
 import { mapDriveRow } from '../types/index';
 import { GoogleDriveService, type GDriveFile, type GDriveFolder } from './google-drive';
