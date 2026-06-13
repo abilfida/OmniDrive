@@ -124,7 +124,7 @@ filesRouter.get('/starred', async (c) => {
   ).bind(userId).all();
 
   const { results: folderRows } = await db.prepare(
-    'SELECT f.*, w.name as ws_name FROM workspace_folders f JOIN workspace_members wm ON f.workspace_id = wm.workspace_id WHERE wm.user_id = ? AND f.is_starred = 1 ORDER BY f.updated_at DESC'
+    'SELECT f.*, w.name as ws_name FROM workspace_folders f JOIN workspace_members wm ON f.workspace_id = wm.workspace_id JOIN workspaces w ON f.workspace_id = w.id WHERE wm.user_id = ? AND f.is_starred = 1 ORDER BY f.updated_at DESC'
   ).bind(userId).all();
 
   // Need to import mapFolderRow if not already
