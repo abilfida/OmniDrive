@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.1] - 2026-06-14
+
+### Added
+
+- **Docker Sync Resilience:**
+  - Implemented chunked initial sync with checkpointing and state lock
+  - Added `next_page_token` to `sync_state` schema to support resume-able syncs
+  - Added OOM-safe generator based `iterateAllFilesAndFolders` to GoogleDriveService
+  - Implemented startup DB cleanup and graceful shutdown handling (e.g. SIGTERM)
+- **Agent Skills & Documentation:**
+  - Added `publish-release` skill definition, design, and plan
+  - Added Docker Sync Resilience plan and design specifications
+
+### Fixed
+
+- **Sync Stability:**
+  - Improved sync logic and atomic upserts based on code review
+  - Integrated `getIsShuttingDown` check into sync loops to prevent concurrent syncs
+  - Refined Google Drive generator and cron behavior based on feedback
+
+
 ## [0.6.0] - 2026-06-12
 
 ### Added

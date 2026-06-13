@@ -23,7 +23,7 @@ Omnidrive lets you connect multiple Google Drive accounts and manage all your fi
 - **⬆️ Smart Upload & Bulk Actions** — Drag-and-drop upload, automatic drive selection, and bulk operations (Move, Delete)
 - **🔒 Shared Links** — Share files with password protection, expiration dates, and download limits
 - **⚡ Automation Rules** — Auto-move or auto-delete files based on name or extension patterns
-- **🔄 Real-Time Sync** — Automatic sync via Google Drive Changes API (cron every 30 minutes)
+- **🔄 Resilient Background Sync** — Automatic sync via Google Drive Changes API (cron every 30 minutes). Features OOM-safe chunk processing using generators, resume-able syncs across restarts via `next_page_token`, atomic upserts for performance, and graceful shutdown (SIGTERM) to prevent concurrent syncs.
 - **🌙 Dark Mode** — Modern dark theme UI with Notion-style hierarchical workspace sidebar
 
 ## Security

@@ -23,7 +23,7 @@ Omnidrive memungkinkan kamu menghubungkan beberapa akun Google Drive dan mengelo
 - **⬆️ Upload Cerdas & Aksi Massal** — Drag-and-drop upload, pemilihan drive otomatis, dan operasi massal (Pindah, Hapus)
 - **🔒 Shared Links** — Bagikan file dengan proteksi password, tanggal kadaluarsa, dan batas download
 - **⚡ Aturan Automasi** — Pindahkan atau hapus file otomatis berdasarkan pola nama atau ekstensi
-- **🔄 Sinkronisasi Real-Time** — Sinkronisasi otomatis via Google Drive Changes API (cron setiap 30 menit)
+- **🔄 Sinkronisasi Latar Belakang Tangguh** — Sinkronisasi otomatis via Google Drive Changes API (cron setiap 30 menit). Dilengkapi pemrosesan chunk yang aman dari OOM (OOM-safe) menggunakan generator, sinkronisasi yang dapat dilanjutkan (resume-able) setelah restart via `next_page_token`, upsert atomik untuk performa tinggi, dan penanganan graceful shutdown (SIGTERM) untuk mencegah sinkronisasi berjalan bersamaan.
 - **🌙 Mode Gelap** — UI tema gelap modern dengan sidebar workspace hierarkis ala Notion
 
 ## Keamanan
