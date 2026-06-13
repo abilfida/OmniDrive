@@ -9,6 +9,9 @@ import { authGuard } from '../middleware/auth-guard';
 import { validatePassword } from '../lib/validation';
 import { generatePKCE } from '../lib/pkce';
 import { encrypt } from '../lib/crypto';
+import { syncDriveAccount } from '../services/sync';
+import { GoogleDriveService } from '../services/google-drive';
+import { mapDriveRow } from '../types';
 
 export const authRouter = new Hono<AppContext>({ strict: false });
 
@@ -162,6 +165,13 @@ authRouter.get('/callback', async (c) => {
   // Encrypt tokens before storing
   const encryptedTokens = await encrypt(JSON.stringify(tokens), env.TOKEN_ENCRYPTION_KEY);
   await env.KV.put(`tokens:${drive.id}`, encryptedTokens);
+
+  const driveRow = await db.prepare('SELECT * FROM drive_accounts WHERE id = ?').bind(drive.id).first();
+  if (driveRow) {
+    const driveObj = mapDriveRow(driveRow as Record<string, unknown>);
+    const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.TOKEN_ENCRYPTION_KEY);
+    c.executionCtx.waitUntil(syncDriveAccount(driveObj, db, env.KV, driveService));
+  }
 
   return c.redirect(`${env.FRONTEND_URL}/`);
 });
