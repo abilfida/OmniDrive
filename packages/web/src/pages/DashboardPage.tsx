@@ -11,7 +11,6 @@ import { useSharedStore } from '../stores/sharedStore';
 import { HardDrive, RefreshCw, TrendingUp, Clock } from 'lucide-react';
 import { useToastStore } from '../stores/toastStore';
 import type { FileEntry } from '../types';
-import { CategoryOverview } from '../components/CategoryOverview';
 
 export function DashboardPage() {
   const { drives, aggregate, isLoading, fetchDrives } = useDriveStore();
@@ -51,32 +50,28 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* Top Section: Aggregate Quota & Category Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {aggregate.driveCount > 0 && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-5 h-full">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <TrendingUp size={18} className="text-blue-600" />
-                <span className="font-semibold text-gray-800">Total Storage</span>
-              </div>
-              <span className="text-sm text-gray-500">
-                {aggregate.driveCount} drive{aggregate.driveCount > 1 ? 's' : ''} connected
-              </span>
+      {/* Aggregate Quota */}
+      {aggregate.driveCount > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} className="text-blue-600" />
+              <span className="font-semibold text-gray-800">Total Storage</span>
             </div>
-            <QuotaBar used={aggregate.totalUsed} total={aggregate.totalQuota} />
-            <div className="flex gap-4 mt-3 text-sm text-gray-500">
-              <span className="text-blue-700 font-medium">{formatFileSize(aggregate.totalUsed)} used</span>
-              <span>·</span>
-              <span>{formatFileSize(aggregate.totalFree)} free</span>
-              <span>·</span>
-              <span>{formatFileSize(aggregate.totalQuota)} total</span>
-            </div>
+            <span className="text-sm text-gray-500">
+              {aggregate.driveCount} drive{aggregate.driveCount > 1 ? 's' : ''} connected
+            </span>
           </div>
-        )}
-        
-        <CategoryOverview />
-      </div>
+          <QuotaBar used={aggregate.totalUsed} total={aggregate.totalQuota} />
+          <div className="flex gap-4 mt-3 text-sm text-gray-500">
+            <span className="text-blue-700 font-medium">{formatFileSize(aggregate.totalUsed)} used</span>
+            <span>·</span>
+            <span>{formatFileSize(aggregate.totalFree)} free</span>
+            <span>·</span>
+            <span>{formatFileSize(aggregate.totalQuota)} total</span>
+          </div>
+        </div>
+      )}
 
       {/* Per-Drive Quota */}
       {drives.length > 0 && (

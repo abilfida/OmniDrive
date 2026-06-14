@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.14] - 2026-06-14
+
+### Changed
+
+- Moved the storage category overview visualization to the sidebar for a more integrated experience.
+- Redesigned the category overview as a horizontal stacked bar chart, matching the style of native Google Drive.
+- Improved the file categorization accuracy to correctly identify and group Google Workspace mime-types (Docs, Sheets, Slides, Photos).
+
+## [0.8.13] - 2026-06-14
+
+### Added
+
+- Implemented a storage category overview endpoint to aggregate file sizes by category (Images, Videos, Documents, Audio, Archives, Others).
+- Integrated `recharts` to render interactive charts.
+
 ## [0.8.12] - 2026-06-14
 
 ### Changed

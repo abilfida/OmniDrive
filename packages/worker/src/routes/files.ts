@@ -84,28 +84,40 @@ filesRouter.get('/category-overview', async (c) => {
     const mime = row.mime_type || '';
     const size = row.total_size || 0;
 
-    if (mime.startsWith('image/')) {
+    if (mime.startsWith('image/') || mime === 'application/vnd.google-apps.photo') {
       overview.images += size;
-    } else if (mime.startsWith('video/')) {
+    } else if (mime.startsWith('video/') || mime === 'application/vnd.google-apps.video') {
       overview.videos += size;
-    } else if (mime.startsWith('audio/')) {
+    } else if (mime.startsWith('audio/') || mime === 'application/vnd.google-apps.audio') {
       overview.audio += size;
     } else if (
       mime.includes('pdf') ||
       mime.includes('document') ||
       mime.includes('msword') ||
       mime.includes('excel') ||
+      mime.includes('spreadsheet') ||
       mime.includes('powerpoint') ||
-      mime.startsWith('text/')
+      mime.includes('presentation') ||
+      mime.startsWith('text/') ||
+      mime === 'application/vnd.google-apps.document' ||
+      mime === 'application/vnd.google-apps.spreadsheet' ||
+      mime === 'application/vnd.google-apps.presentation' ||
+      mime === 'application/vnd.google-apps.jam' ||
+      mime === 'application/vnd.google-apps.form'
     ) {
       overview.documents += size;
     } else if (
       mime.includes('zip') ||
       mime.includes('rar') ||
       mime.includes('tar') ||
-      mime.includes('gzip')
+      mime.includes('gzip') ||
+      mime === 'application/x-7z-compressed' ||
+      mime === 'application/vnd.rar' ||
+      mime === 'application/x-zip-compressed'
     ) {
       overview.archives += size;
+    } else if (mime === 'application/vnd.google-apps.folder' || mime === 'application/vnd.google-apps.shortcut') {
+      // ignore folders and shortcuts
     } else {
       overview.others += size;
     }
