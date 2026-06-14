@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.15] - 2026-06-14
+
+### Added
+
+- Added file input UI to the upload modal when the upload queue is empty, allowing users to select files directly.
+
+### Changed
+
+- Renamed "Recent" navigation menu to "Home" and moved it to the top of the sidebar.
+- Redesigned the storage overview in the sidebar to use a single stacked progress bar.
+- Reordered the "Settings" menu to be below "Users".
+
+### Removed
+
+- Removed the "Manage Storage" button from the sidebar.
+
+### Fixed
+
+- Fixed the `allDone` logic in the upload modal to correctly handle an empty queue.
+
 ## [0.8.14] - 2026-06-14
 
 ### Changed
