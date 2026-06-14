@@ -11,6 +11,7 @@ import {
   Star,
   FolderTree,
   UserCog,
+  Home,
 } from 'lucide-react';
 import { SidebarStorage } from './SidebarStorage';
 
@@ -31,13 +32,13 @@ export const Sidebar: React.FC = () => {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-0.5">
+        <NavLink to="/" end className={navLinkClass}>
+          <Home size={20} />
+          <span>Home</span>
+        </NavLink>
         <NavLink to="/files/root" className={navLinkClass}>
           <HardDrive size={20} />
           <span>My Drive</span>
-        </NavLink>
-        <NavLink to="/" end className={navLinkClass}>
-          <Clock size={20} />
-          <span>Recent</span>
         </NavLink>
         <NavLink to="/starred" className={navLinkClass}>
           <Star size={20} />
@@ -61,16 +62,14 @@ export const Sidebar: React.FC = () => {
             <span>Users</span>
           </NavLink>
         )}
+        <NavLink to="/settings" className={navLinkClass}>
+          <Settings size={20} />
+          <span>Settings</span>
+        </NavLink>
       </nav>
 
       {/* Spacer */}
       <div className="flex-1" />
-
-      {/* Settings link */}
-      <NavLink to="/settings" className={navLinkClass}>
-        <Settings size={20} />
-        <span>Settings</span>
-      </NavLink>
 
       {/* Storage quota */}
       <SidebarStorage />
