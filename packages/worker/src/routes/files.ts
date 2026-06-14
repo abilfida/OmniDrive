@@ -59,6 +59,61 @@ filesRouter.get('/recent', async (c) => {
   });
 });
 
+// GET /api/files/category-overview
+filesRouter.get('/category-overview', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const { results } = await db.prepare(`
+    SELECT mime_type, SUM(size) as total_size
+    FROM files
+    WHERE user_id = ? AND is_trashed = 0
+    GROUP BY mime_type
+  `).bind(userId).all<{ mime_type: string; total_size: number }>();
+
+  const overview = {
+    images: 0,
+    videos: 0,
+    documents: 0,
+    audio: 0,
+    archives: 0,
+    others: 0,
+  };
+
+  for (const row of results) {
+    const mime = row.mime_type || '';
+    const size = row.total_size || 0;
+
+    if (mime.startsWith('image/')) {
+      overview.images += size;
+    } else if (mime.startsWith('video/')) {
+      overview.videos += size;
+    } else if (mime.startsWith('audio/')) {
+      overview.audio += size;
+    } else if (
+      mime.includes('pdf') ||
+      mime.includes('document') ||
+      mime.includes('msword') ||
+      mime.includes('excel') ||
+      mime.includes('powerpoint') ||
+      mime.startsWith('text/')
+    ) {
+      overview.documents += size;
+    } else if (
+      mime.includes('zip') ||
+      mime.includes('rar') ||
+      mime.includes('tar') ||
+      mime.includes('gzip')
+    ) {
+      overview.archives += size;
+    } else {
+      overview.others += size;
+    }
+  }
+
+  return c.json(overview);
+});
+
 // GET /api/files/search
 filesRouter.get('/search', async (c) => {
   const userId = c.get('userId');

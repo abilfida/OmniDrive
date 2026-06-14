@@ -141,6 +141,10 @@ export const api = {
   // Recent files (uses root contents, sorted by date)
   getRecentFiles: () =>
     request<{ files: import('../types').FileEntry[], folders: import('../types').WorkspaceFolder[] }>('/api/files/recent'),
+    
+  // Category overview
+  getFileCategoryOverview: () =>
+    request<{ images: number; videos: number; documents: number; audio: number; archives: number; others: number }>('/api/files/category-overview'),
 
   // Automations
   getAutomations: () => request<{ rules: any[] }>('/api/automations'),
