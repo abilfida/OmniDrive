@@ -35,7 +35,7 @@ export function UploadModal({ folderId, driveId, onClose, onSuccess }: UploadMod
     }
   };
 
-  const allDone = queue.every((item) => item.status === 'done' || item.status === 'error');
+  const allDone = queue.length > 0 && queue.every((item) => item.status === 'done' || item.status === 'error');
 
   const statusIcon = (status: string) => {
     switch (status) {
@@ -57,28 +57,53 @@ export function UploadModal({ folderId, driveId, onClose, onSuccess }: UploadMod
           </button>
         </div>
 
-        {/* File list */}
+        {/* File list or File Picker */}
         <div className="max-h-[200px] overflow-y-auto px-6 py-2 border-b border-gray-100">
-          {queue.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 py-3 border-b border-gray-50 last:border-0">
-              <span className="flex-1 text-sm text-gray-700 truncate">{item.file.name}</span>
-              <span className="text-xs text-gray-400 whitespace-nowrap">{formatFileSize(item.file.size)}</span>
-              {item.status === 'uploading' && (
-                <span className="text-xs text-blue-600 min-w-[40px] text-right font-medium">{item.progress}%</span>
-              )}
-              <div className="w-4 h-4 flex items-center justify-center shrink-0">
-                {statusIcon(item.status)}
-              </div>
-              {item.status === 'pending' && !isUploading && (
-                <button 
-                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors" 
-                  onClick={() => removeFile(item.id)}
-                >
-                  <X size={14} />
-                </button>
-              )}
+          {queue.length === 0 ? (
+            <div className="py-8 flex flex-col items-center justify-center">
+              <input 
+                type="file" 
+                multiple 
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    useUploadStore.getState().addFiles(Array.from(e.target.files));
+                  }
+                }} 
+                className="hidden" 
+                id="modal-file-upload" 
+              />
+              <label 
+                htmlFor="modal-file-upload" 
+                className="cursor-pointer flex flex-col items-center gap-3 text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
+                  <Upload size={24} />
+                </div>
+                <span className="text-sm font-medium">Click to select files</span>
+              </label>
             </div>
-          ))}
+          ) : (
+            queue.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 py-3 border-b border-gray-50 last:border-0">
+                <span className="flex-1 text-sm text-gray-700 truncate">{item.file.name}</span>
+                <span className="text-xs text-gray-400 whitespace-nowrap">{formatFileSize(item.file.size)}</span>
+                {item.status === 'uploading' && (
+                  <span className="text-xs text-blue-600 min-w-[40px] text-right font-medium">{item.progress}%</span>
+                )}
+                <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                  {statusIcon(item.status)}
+                </div>
+                {item.status === 'pending' && !isUploading && (
+                  <button 
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors" 
+                    onClick={() => removeFile(item.id)}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
         {/* Drive selector */}
