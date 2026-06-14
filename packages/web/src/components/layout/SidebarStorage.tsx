@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useDriveStore } from '../../stores/driveStore';
 import { formatFileSize } from '../../lib/utils';
 import { api } from '../../lib/api';
-import { NavLink } from 'react-router-dom';
 
 interface CategoryData {
   name: string;

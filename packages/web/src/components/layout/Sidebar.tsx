@@ -7,7 +7,6 @@ import {
   Users,
   Trash2,
   Settings,
-  Clock,
   Star,
   FolderTree,
   UserCog,
