@@ -98,7 +98,7 @@ const ItemContextMenuContent: React.FC<{
           </ContextMenuItem>
         )}
         {type === 'file' && file && !native && file.webContentLink && (
-          <ContextMenuItem onClick={() => window.open(file.webContentLink!, '_blank', 'noopener,noreferrer')}>
+          <ContextMenuItem onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || ''}/api/files/${file.id}/download`}>
             <Download className="mr-2 h-4 w-4" /> Download
           </ContextMenuItem>
         )}

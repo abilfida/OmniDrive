@@ -125,7 +125,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
           )}
           {file.webContentLink && !isGoogleDoc && (
             <a 
-              href={file.webContentLink} 
+              href={`${import.meta.env.VITE_API_URL || ''}/api/files/${file.id}/download`}
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
