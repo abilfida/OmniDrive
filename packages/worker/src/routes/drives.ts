@@ -148,16 +148,16 @@ drivesRouter.get('/:driveId/folders/:googleFolderId', async (c) => {
 
   const subfolderResult = googleFolderId === 'root'
     ? await c.env.DB
-        .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id IS NULL')
+        .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id IS NULL ORDER BY name ASC LIMIT 1000')
         .bind(driveId)
         .all()
     : await c.env.DB
-        .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ?')
+        .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ? ORDER BY name ASC LIMIT 1000')
         .bind(driveId, googleFolderId)
         .all();
 
   const filesResult = await c.env.DB
-    .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ?')
+    .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ? AND is_trashed = 0 ORDER BY name ASC LIMIT 1000')
     .bind(driveId, googleFolderId)
     .all();
 
@@ -216,11 +216,11 @@ drivesRouter.post('/:driveId/folders/:googleFolderId/sync', async (c) => {
   // Idempotency: already synced — return existing DB data
   if (folder && (folder as Record<string, unknown>).is_synced) {
     const subfolders = await c.env.DB
-      .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ?')
+      .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ? ORDER BY name ASC LIMIT 1000')
       .bind(driveId, googleFolderId)
       .all();
     const files = await c.env.DB
-      .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ?')
+      .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ? AND is_trashed = 0 ORDER BY name ASC LIMIT 1000')
       .bind(driveId, googleFolderId)
       .all();
     const breadcrumb = await buildDriveBreadcrumb(c.env.DB, driveId, googleFolderId);
@@ -312,11 +312,11 @@ drivesRouter.post('/:driveId/folders/:googleFolderId/sync', async (c) => {
   }
 
   const newSubfolders = await c.env.DB
-    .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ?')
+    .prepare('SELECT * FROM drive_folders WHERE drive_account_id = ? AND google_parent_id = ? ORDER BY name ASC LIMIT 1000')
     .bind(driveId, googleFolderId)
     .all();
   const newFiles = await c.env.DB
-    .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ?')
+    .prepare('SELECT * FROM files WHERE drive_account_id = ? AND google_parent_id = ? AND is_trashed = 0 ORDER BY name ASC LIMIT 1000')
     .bind(driveId, googleFolderId)
     .all();
 
