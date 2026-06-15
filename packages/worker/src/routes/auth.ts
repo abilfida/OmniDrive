@@ -62,7 +62,8 @@ authRouter.post('/register', async (c) => {
   const sessionId = generateId();
   
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 });
-  setCookie(c, 'omnidrive_sid', sessionId, { path: '/', secure: true, httpOnly: true, sameSite: 'None', maxAge: 60 * 60 * 24 * 7 });
+  const isSecure = c.env.WORKER_URL.startsWith('https://');
+  setCookie(c, 'omnidrive_sid', sessionId, { path: '/', secure: isSecure, httpOnly: true, sameSite: isSecure ? 'None' : 'Lax', maxAge: 60 * 60 * 24 * 7 });
 
   return c.json({ success: true, user: sessionData, isSuperAdmin: !!isSuperAdmin });
 });
@@ -80,7 +81,8 @@ authRouter.post('/login', async (c) => {
   const sessionId = generateId();
   
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 });
-  setCookie(c, 'omnidrive_sid', sessionId, { path: '/', secure: true, httpOnly: true, sameSite: 'None', maxAge: 60 * 60 * 24 * 7 });
+  const isSecure = c.env.WORKER_URL.startsWith('https://');
+  setCookie(c, 'omnidrive_sid', sessionId, { path: '/', secure: isSecure, httpOnly: true, sameSite: isSecure ? 'None' : 'Lax', maxAge: 60 * 60 * 24 * 7 });
 
   return c.json({ success: true, user: sessionData });
 });
@@ -111,7 +113,8 @@ authRouter.get('/google', async (c) => {
 
   // Store state + PKCE verifier in KV (10-min TTL)
   await env.KV.put(`oauth_state:${state}`, JSON.stringify({ codeVerifier }), { expirationTtl: 600 });
-  setCookie(c, 'oauth_state', state, { path: '/', httpOnly: true, secure: true, maxAge: 60 * 5 });
+  const isSecure = env.WORKER_URL.startsWith('https://');
+  setCookie(c, 'oauth_state', state, { path: '/', httpOnly: true, secure: isSecure, sameSite: isSecure ? 'None' : 'Lax', maxAge: 60 * 5 });
 
   authUrl.searchParams.append('state', state);
   authUrl.searchParams.append('code_challenge', codeChallenge);

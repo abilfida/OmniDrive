@@ -28,7 +28,7 @@ export const Header: React.FC = () => {
           <Menu size={24} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-blue-500 to-green-500 flex-shrink-0 opacity-90" />
+          <img src="/logo.png" alt="OmniDrive" className="w-8 h-8 object-contain flex-shrink-0" />
           <span className="text-xl text-gray-700 font-medium tracking-wide">OmniDrive</span>
         </div>
       </div>

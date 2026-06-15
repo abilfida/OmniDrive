@@ -35,7 +35,10 @@ export function LoginPage() {
 
       <div className="relative w-full max-w-sm">
         <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl shadow-blue-900/10 border border-white/60 p-10 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">OmniDrive</h1>
+          <div className="flex flex-col items-center justify-center mb-1">
+            <img src="/logo.png" alt="OmniDrive" className="w-16 h-16 object-contain mb-3 drop-shadow-md" />
+            <h1 className="text-3xl font-bold text-gray-900">OmniDrive</h1>
+          </div>
           <p className="text-gray-500 text-sm mb-8">
             Your unified Google Drive gateway
           </p>

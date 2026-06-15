@@ -114,34 +114,25 @@ Atau gunakan [dashboard Cloudflare Pages](https://dash.cloudflare.com/?to=/:acco
 
 ## Variabel Environment
 
-### Secrets Worker (set via `wrangler secret put` atau `.dev.vars`)
+Omnidrive menggunakan **satu file `.env` terpusat** di root project untuk mengelola konfigurasi Web dan Worker secara bersamaan.
 
-| Variabel | Deskripsi |
-|----------|-----------|
-| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
-| `JWT_SECRET` | Kunci khusus untuk menandatangani JWT link yang dibagikan (minimal 32 karakter) |
-| `TOKEN_ENCRYPTION_KEY` | Kunci AES-256-GCM untuk mengenkripsi token OAuth saat istirahat (32 karakter) |
+### Konfigurasi Global (set di `/.env`)
 
-### Konfigurasi Worker (set di `wrangler.toml` `[vars]`)
+Salin `/.env.example` menjadi `/.env` dan isi dengan nilai yang sesuai. File ini secara otomatis akan dibaca oleh Vite maupun Wrangler selama local development.
 
 | Variabel | Deskripsi | Default |
 |----------|-----------|---------|
-| `FRONTEND_URL` | Origin frontend untuk CORS dan redirect | `http://localhost:5173` |
-| `WORKER_URL` | URL Worker untuk OAuth callback | `http://localhost:8787` |
+| `WEB_PORT` | Port untuk frontend React | `8999` |
+| `WORKER_PORT` | Port untuk Cloudflare Worker API | `8888` |
+| `FRONTEND_URL` | Origin frontend untuk CORS dan redirect | `http://localhost:8999` |
+| `WORKER_URL` | URL Worker untuk OAuth callback | `http://localhost:8888` |
+| `VITE_API_URL` | URL base API Worker untuk frontend | `http://localhost:8888` |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID | |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret | |
+| `JWT_SECRET` | Kunci khusus penanda tangan JWT (minimal 32 karakter) | |
+| `TOKEN_ENCRYPTION_KEY` | Kunci enkripsi token OAuth saat istirahat (32 karakter) | |
 
-### Binding Worker (set di `wrangler.toml`)
-
-| Binding | Tipe | Deskripsi |
-|---------|------|-----------|
-| `DB` | D1 Database | Database SQLite untuk semua data aplikasi |
-| `KV` | KV Namespace | Penyimpanan sesi dan cache token OAuth |
-
-### Environment Web (set di `.env` atau `.env.production`)
-
-| Variabel | Deskripsi | Default |
-|----------|-----------|---------|
-| `VITE_API_URL` | URL base API Worker (kosongkan untuk dev lokal) | `""` |
+*Catatan: Untuk production di Cloudflare, secrets backend harus diset via `wrangler secret put`, dan variabel biasa di `wrangler.toml` bagian `[vars]`. Frontend menggunakan `packages/web/.env.production`.*
 
 ## Lisensi
 

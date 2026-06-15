@@ -113,34 +113,25 @@ Or use the [Cloudflare Pages dashboard](https://dash.cloudflare.com/?to=/:accoun
 
 ## Environment Variables
 
-### Worker Secrets (set via `wrangler secret put` atau `.dev.vars`)
+Omnidrive uses a **single centralized `.env` file** at the root of the project to manage both Web and Worker configurations.
 
-| Variable | Description |
-|----------|-------------|
-| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
-| `JWT_SECRET` | Dedicated JWT signing key for shared links (min 32 chars) |
-| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for encrypting OAuth tokens at rest (32 chars) |
+### Global Configuration (set in `/.env`)
 
-### Worker Config (set in `wrangler.toml` `[vars]`)
+Copy `/.env.example` to `/.env` and fill in your values. This file is automatically read by both Vite and Wrangler during local development.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `FRONTEND_URL` | Frontend origin for CORS and redirects | `http://localhost:5173` |
-| `WORKER_URL` | Worker URL for OAuth callback | `http://localhost:8787` |
+| `WEB_PORT` | Port for the React frontend | `8999` |
+| `WORKER_PORT` | Port for the Cloudflare Worker API | `8888` |
+| `FRONTEND_URL` | Frontend origin for CORS and redirects | `http://localhost:8999` |
+| `WORKER_URL` | Worker URL for OAuth callback | `http://localhost:8888` |
+| `VITE_API_URL` | Worker API base URL for the frontend | `http://localhost:8888` |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID | |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret | |
+| `JWT_SECRET` | JWT signing key for shared links (min 32 chars) | |
+| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for encrypting OAuth tokens (32 chars)| |
 
-### Worker Bindings (set in `wrangler.toml`)
-
-| Binding | Type | Description |
-|---------|------|-------------|
-| `DB` | D1 Database | SQLite database for all application data |
-| `KV` | KV Namespace | Session storage and OAuth token cache |
-
-### Web Environment (set in `.env` or `.env.production`)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VITE_API_URL` | Worker API base URL (empty for local dev) | `""` |
+*Note: For production on Cloudflare, backend secrets should be set via `wrangler secret put`, and non-secrets in `wrangler.toml` under `[vars]`. The frontend uses `packages/web/.env.production`.*
 
 ## License
 

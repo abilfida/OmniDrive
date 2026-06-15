@@ -2,7 +2,7 @@
   "name": "@omnidrive/worker",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --port ${WORKER_PORT:-8787}",
     "build": "wrangler deploy --dry-run --outdir=dist",
     "build:node": "esbuild src/node-server.ts --bundle --platform=node --outfile=dist/node-server.cjs --external:better-sqlite3",
     "deploy": "wrangler deploy",

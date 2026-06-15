@@ -28,10 +28,17 @@ app.use('/api/*', csrfGuard);
 import { AppError } from './middleware/error-handler';
 
 app.onError((err, c) => {
-  console.error('Unhandled error:', err);
   const isAppError = err instanceof AppError || err.name === 'AppError';
   const status = isAppError ? (err as any).status : 500;
   const message = isAppError ? err.message : 'Internal server error';
+  
+  if (status >= 500) {
+    console.error('Unhandled server error:', err);
+  } else {
+    // Optional: Just log 4xx errors as info if needed, or suppress
+    // console.info(`[${status}] ${message}`);
+  }
+  
   return c.json({ error: message }, status as any);
 });
 

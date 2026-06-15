@@ -11,8 +11,10 @@ import {
   FolderTree,
   UserCog,
   Home,
+  Github,
 } from 'lucide-react';
 import { SidebarStorage } from './SidebarStorage';
+import pkg from '../../../../../package.json';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-3 px-4 py-2 rounded-full cursor-pointer transition-colors text-sm ${
@@ -72,6 +74,20 @@ export const Sidebar: React.FC = () => {
 
       {/* Storage quota */}
       <SidebarStorage />
+
+      {/* Version and Links */}
+      <div className="mt-4 px-3 flex items-center justify-between text-xs text-gray-400">
+        <a 
+          href={pkg.repository.url.replace('.git', '')} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 hover:text-gray-600 transition-colors"
+        >
+          <Github size={14} />
+          <span>GitHub</span>
+        </a>
+        <span>v{pkg.version}</span>
+      </div>
     </aside>
   );
 };

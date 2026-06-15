@@ -16,7 +16,7 @@
   "scripts": {
     "dev:worker": "npm run dev -w packages/worker",
     "dev:web": "npm run dev -w packages/web",
-    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:web\"",
+    "dev": "node -r dotenv/config ./node_modules/.bin/concurrently \"npm run dev:worker\" \"npm run dev:web\"",
     "build:worker": "npm run build -w packages/worker",
     "build:web": "npm run build -w packages/web",
     "test": "npm run test -w packages/worker"
