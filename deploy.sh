@@ -5,10 +5,15 @@ echo "Starting Omnidrive Setup..."
 
 # Check if we are in the omnidrive directory
 if [ ! -f "package.json" ] || ! grep -q '"name": "omnidrive"' package.json; then
-    echo "Omnidrive repository not found in current directory."
-    echo "Cloning https://github.com/abilfida/omnidrive.git..."
-    git clone https://github.com/abilfida/omnidrive.git
-    cd omnidrive
+    if [ -d "omnidrive" ]; then
+        echo "Found existing 'omnidrive' directory. Entering..."
+        cd omnidrive
+    else
+        echo "Omnidrive repository not found in current directory."
+        echo "Cloning https://github.com/abilfida/omnidrive.git..."
+        git clone https://github.com/abilfida/omnidrive.git
+        cd omnidrive
+    fi
 fi
 if ! command -v node &> /dev/null; then
     echo "Error: Node.js is not installed. Please install Node.js 18+." >&2

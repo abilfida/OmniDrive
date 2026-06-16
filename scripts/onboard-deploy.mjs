@@ -86,7 +86,12 @@ async function getBaseUrls(target, defaultPort = '3000') {
 }
 
 async function main() {
-  intro(pc.inverse(' Welcome to Omnidrive Deployment Wizard '));
+  let version = 'unknown';
+  try {
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    version = pkg.version || 'unknown';
+  } catch (e) {}
+  intro(pc.inverse(` Welcome to Omnidrive Deployment Wizard (v${version}) `));
 
   const target = checkCancel(await select({
     message: 'Where do you want to deploy Omnidrive?',
