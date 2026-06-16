@@ -179,16 +179,10 @@ async function main() {
     
     sCheck.stop('Cloudflare deployment status checked.');
     
-    let useExisting = false;
     if (hasWeb || hasWorker) {
       console.log(pc.cyan(`\nExisting deployments detected:`));
       console.log(`- Web (Pages): ${hasWeb ? pc.green('Yes') : pc.yellow('No')}`);
       console.log(`- Worker (API): ${hasWorker ? pc.green('Yes') : pc.yellow('No')}\n`);
-      
-      useExisting = checkCancel(await confirm({
-        message: 'Do you want to use the existing D1/KV IDs and Secrets? (If Yes, we will fetch IDs from Cloudflare and skip creating new resources)',
-        initialValue: true,
-      }));
     }
 
     const wranglerPath = 'packages/worker/wrangler.toml';
@@ -200,80 +194,103 @@ async function main() {
       }
     }
 
-    if (useExisting) {
-      const sFetch = spinner();
-      sFetch.start('Fetching existing D1 and KV IDs from Cloudflare...');
-      
-      let toml = fs.readFileSync(wranglerPath, 'utf8');
+    let toml = fs.readFileSync(wranglerPath, 'utf8');
+    const currentD1Match = toml.match(/database_id\s*=\s*"([^"]+)"/);
+    const currentD1 = currentD1Match ? currentD1Match[1] : null;
+    const currentKVMatch = toml.match(/(?:\n|^)\s*id\s*=\s*"([^"]+)"/);
+    const currentKV = currentKVMatch ? currentKVMatch[1] : null;
 
-      // Fetch D1
-      const d1ListRaw = runCmdSilent('npx wrangler d1 list --json');
-      if (d1ListRaw) {
-        try {
-          const d1s = JSON.parse(d1ListRaw);
-          const d1 = d1s.find(d => d.name === 'omnidrive-prod' || d.name === 'omnidrive');
-          if (d1 && d1.uuid) {
-            toml = toml.replace(/database_id\s*=\s*"[^"]+"/, `database_id = "${d1.uuid}"`);
-            console.log(pc.green(`\nFound existing D1: ${d1.name} (${d1.uuid})`));
-          }
-        } catch (e) {}
+    const sFetch = spinner();
+    sFetch.start('Fetching available D1 databases and KV namespaces from Cloudflare...');
+    
+    const d1ListRaw = runCmdSilent('npx wrangler d1 list --json');
+    let d1s = [];
+    if (d1ListRaw) {
+      try { d1s = JSON.parse(d1ListRaw); } catch(e){}
+    }
+
+    const kvListRaw = runCmdSilent('npx wrangler kv namespace list');
+    let kvs = [];
+    if (kvListRaw) {
+      try { kvs = JSON.parse(kvListRaw); } catch(e){}
+    }
+    sFetch.stop('Cloudflare resources fetched.');
+
+    const d1Options = [{ value: 'CREATE_NEW', label: '✨ Create New D1 Database' }];
+    d1s.forEach(d => {
+      const isCurrent = d.uuid === currentD1;
+      d1Options.push({
+        value: d.uuid,
+        label: `${d.name} (${d.uuid})${isCurrent ? ' (current)' : ''}`
+      });
+    });
+
+    const selectedD1 = checkCancel(await select({
+      message: 'Select D1 Database to use:',
+      options: d1Options,
+    }));
+
+    const kvOptions = [{ value: 'CREATE_NEW', label: '✨ Create New KV Namespace' }];
+    kvs.forEach(k => {
+      const isCurrent = k.id === currentKV;
+      kvOptions.push({
+        value: k.id,
+        label: `${k.title} (${k.id})${isCurrent ? ' (current)' : ''}`
+      });
+    });
+
+    const selectedKV = checkCancel(await select({
+      message: 'Select KV Namespace to use:',
+      options: kvOptions,
+    }));
+
+    let d1UuidToUse = selectedD1;
+    let kvIdToUse = selectedKV;
+
+    const sProv = spinner();
+    sProv.start('Provisioning resources...');
+
+    if (selectedD1 === 'CREATE_NEW') {
+      let d1Output = runCmdSilent('npx wrangler d1 create omnidrive-prod');
+      if (d1Output) {
+        const match = d1Output.match(/(?:database_id[=:]|"database_id":)\s*"([^"]+)"/);
+        if (match && match[1]) d1UuidToUse = match[1];
       }
+    }
 
-      // Fetch KV
-      const kvListRaw = runCmdSilent('npx wrangler kv namespace list');
-      if (kvListRaw) {
-        try {
-          const kvs = JSON.parse(kvListRaw);
-          const kv = kvs.find(k => (k.title || '').includes('KV_PROD') || (k.title || '').includes('KV'));
-          if (kv && kv.id) {
-            toml = toml.replace(/id\s*=\s*"[^"]+"/, `id = "${kv.id}"`);
-            console.log(pc.green(`Found existing KV: ${kv.title} (${kv.id})`));
-          }
-        } catch (e) {}
+    if (selectedKV === 'CREATE_NEW') {
+      let kvOutput = runCmdSilent('npx wrangler kv namespace create KV_PROD');
+      if (kvOutput) {
+        const match = kvOutput.match(/(?:id[=:]|"id":)\s*"([^"]+)"/);
+        if (match && match[1]) kvIdToUse = match[1];
       }
+    }
 
-      fs.writeFileSync(wranglerPath, toml);
-      sFetch.stop('Updated local wrangler.toml with existing IDs. Skipped provisioning new secrets.');
-    } else {
+    if (d1UuidToUse) {
+      toml = toml.replace(/database_id\s*=\s*"[^"]+"/, `database_id = "${d1UuidToUse}"`);
+    }
+    if (kvIdToUse) {
+      // Fix regex so it doesn't accidentally replace the 'id' part in 'database_id'
+      toml = toml.replace(/(\n\s*id\s*=\s*)"[^"]+"/, `$1"${kvIdToUse}"`);
+    }
+    fs.writeFileSync(wranglerPath, toml);
+    sProv.stop('Resources updated in wrangler.toml.');
+
+    const updateSecrets = checkCancel(await confirm({
+      message: 'Do you want to update/push secrets to Cloudflare? (Select Yes if this is a new deployment)',
+      initialValue: selectedD1 === 'CREATE_NEW' || selectedKV === 'CREATE_NEW'
+    }));
+
+    if (updateSecrets) {
       const { frontendUrl, workerUrl } = await getBaseUrls('cloudflare');
       const { clientId, clientSecret } = await getOAuthCredentials();
 
-      const s = spinner();
-      s.start('Provisioning Cloudflare resources (D1 & KV)...');
-
-      // Create D1 if not exists
-      let d1Output = runCmdSilent('npx wrangler d1 create omnidrive-prod');
-      if (d1Output) {
-        const d1Match = d1Output.match(/(?:database_id[=:]|"database_id":)\s*"([^"]+)"/);
-        if (d1Match && d1Match[1] && fs.existsSync(wranglerPath)) {
-          let toml = fs.readFileSync(wranglerPath, 'utf8');
-          toml = toml.replace(/database_id = "[^"]+"/, `database_id = "${d1Match[1]}"`);
-          fs.writeFileSync(wranglerPath, toml);
-        }
-      } else {
-        console.log(pc.yellow('\nD1 creation failed or already exists. Proceeding with existing wrangler.toml...'));
-      }
-      
-      // Create KV if not exists
-      let kvOutput = runCmdSilent('npx wrangler kv namespace create KV_PROD');
-      if (kvOutput) {
-        const kvMatch = kvOutput.match(/(?:id[=:]|"id":)\s*"([^"]+)"/);
-        if (kvMatch && kvMatch[1] && fs.existsSync(wranglerPath)) {
-          let toml = fs.readFileSync(wranglerPath, 'utf8');
-          // Look for KV id replacement
-          toml = toml.replace(/id = "[^"]+"/, `id = "${kvMatch[1]}"`);
-          fs.writeFileSync(wranglerPath, toml);
-        }
-      } else {
-        console.log(pc.yellow('\nKV creation failed or already exists. Proceeding with existing wrangler.toml...'));
-      }
-
-      s.message('Pushing secrets to Cloudflare...');
+      const sSec = spinner();
+      sSec.start('Pushing secrets to Cloudflare...');
       
       const jwtSecret = generateSecret(32);
       const tokenEncryptionKey = generateSecret(32);
 
-      // Push secrets
       runCmdSilent(`echo "${frontendUrl}" | npx wrangler secret put FRONTEND_URL -c packages/worker/wrangler.toml`);
       runCmdSilent(`echo "${workerUrl}" | npx wrangler secret put WORKER_URL -c packages/worker/wrangler.toml`);
       if (clientId) runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
@@ -281,7 +298,7 @@ async function main() {
       runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml`);
       runCmdSilent(`echo "${tokenEncryptionKey}" | npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml`);
 
-      s.stop('Resources and secrets provisioned.');
+      sSec.stop('Secrets provisioned.');
     }
 
     console.log(pc.cyan('Deploying to Cloudflare (Worker & Web)...'));
