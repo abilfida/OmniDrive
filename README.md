@@ -110,6 +110,47 @@ Follow the prompts to select your deployment target:
 
 Or use the [Cloudflare Pages dashboard](https://dash.cloudflare.com/?to=/:account/pages) for automatic deployments from your Git repo if you prefer CI/CD.
 
+### 3. Manual Deployment to Cloudflare
+
+If you prefer not to use the `deploy.sh` script, you can deploy manually:
+
+1. **Login to Cloudflare via Wrangler**
+   ```bash
+   npx wrangler login
+   ```
+2. **Create D1 Database**
+   ```bash
+   npx wrangler d1 create omnidrive
+   ```
+   *Update `packages/worker/wrangler.toml` with the generated `database_id`.*
+3. **Create KV Namespace**
+   ```bash
+   npx wrangler kv:namespace create OMNIDRIVE_SESSIONS
+   ```
+   *Update `packages/worker/wrangler.toml` with the generated KV `id`.*
+4. **Apply Database Migrations**
+   ```bash
+   npm run db:migrate:remote -w packages/worker
+   ```
+5. **Set Secrets (Secure Environment Variables)**
+   Run these commands one by one and enter the respective values:
+   ```bash
+   npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml
+   npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml
+   npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml
+   npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml
+   ```
+6. **Deploy Worker (Backend)**
+   ```bash
+   npm run deploy -w packages/worker
+   ```
+   *Note the Worker URL provided after deployment.*
+7. **Deploy Pages (Frontend)**
+   Ensure you have configured `packages/web/.env.production` with your newly deployed Worker domain.
+   ```bash
+   npm run build -w packages/web
+   npx wrangler pages deploy packages/web/dist --project-name=omnidrive-web
+   ```
 
 ## Environment Variables
 

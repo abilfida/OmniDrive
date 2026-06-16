@@ -110,7 +110,47 @@ Ikuti panduan di layar untuk memilih target deployment kamu:
 
 Atau gunakan [dashboard Cloudflare Pages](https://dash.cloudflare.com/?to=/:account/pages) untuk deployment otomatis dari repo Git jika kamu lebih memilih menggunakan CI/CD.
 
+### 3. Deploy Manual ke Cloudflare
 
+Jika kamu tidak menggunakan script `deploy.sh`, kamu bisa mendeploy secara manual:
+
+1. **Login ke Cloudflare via Wrangler**
+   ```bash
+   npx wrangler login
+   ```
+2. **Buat Database D1**
+   ```bash
+   npx wrangler d1 create omnidrive
+   ```
+   *Perbarui file `wrangler.toml` di dalam `packages/worker/wrangler.toml` dengan `database_id` yang didapat.*
+3. **Buat KV Namespace**
+   ```bash
+   npx wrangler kv:namespace create OMNIDRIVE_SESSIONS
+   ```
+   *Perbarui file `wrangler.toml` dengan `id` KV yang didapat.*
+4. **Terapkan Migrasi Database**
+   ```bash
+   npm run db:migrate:remote -w packages/worker
+   ```
+5. **Set Secrets (Variabel Lingkungan yang Aman)**
+   Jalankan perintah ini satu per satu dan masukkan nilainya:
+   ```bash
+   npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml
+   npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml
+   npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml
+   npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml
+   ```
+6. **Deploy Worker (Backend)**
+   ```bash
+   npm run deploy -w packages/worker
+   ```
+   *Catat URL Worker yang diberikan setelah proses deploy selesai.*
+7. **Deploy Pages (Frontend)**
+   Pastikan kamu telah mengonfigurasi `packages/web/.env.production` dengan domain Worker yang baru saja dideploy.
+   ```bash
+   npm run build -w packages/web
+   npx wrangler pages deploy packages/web/dist --project-name=omnidrive-web
+   ```
 
 ## Variabel Environment
 
