@@ -17,6 +17,7 @@ export const authRouter = new Hono<AppContext>({ strict: false });
 
 authRouter.get('/setup-status', async (c) => {
   const result = await c.env.DB.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.json({ isSetup: (result?.count || 0) > 0 });
 });
 

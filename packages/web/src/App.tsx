@@ -24,10 +24,29 @@ export const SetupGuard = ({ children, isSetup }: { children: React.ReactNode, i
 
 export const App = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  const checkSetupStatus = () => {
+    setSetupError(null);
+    setIsSetup(null);
+    api.getSetupStatus()
+      .then(res => setIsSetup(res.isSetup))
+      .catch(err => setSetupError(err.message || 'Failed to connect to server'));
+  };
 
   useEffect(() => {
-    api.getSetupStatus().then(res => setIsSetup(res.isSetup)).catch(() => setIsSetup(true));
+    checkSetupStatus();
   }, []);
+
+  if (setupError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem' }}>
+        <h2>Connection Error</h2>
+        <p>{setupError}</p>
+        <button onClick={checkSetupStatus} style={{ padding: '8px 16px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc', background: '#fff' }}>Retry</button>
+      </div>
+    );
+  }
 
   if (isSetup === null) return null; // loading state
 
