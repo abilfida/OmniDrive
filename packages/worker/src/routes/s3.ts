@@ -467,7 +467,226 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   return c.text('', 200);
 });
 
-// Placeholder helper to keep compiler happy until Task 7 is written
+// Helper to upload a part
 async function handleUploadPart(c: any, uploadId: string, partNumber: number): Promise<Response> {
-  return c.text('Multipart Upload Part not implemented yet', 501);
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const upload = await db.prepare('SELECT * FROM s3_multipart_uploads WHERE upload_id = ? AND user_id = ?')
+    .bind(uploadId, userId).first<any>();
+  if (!upload) return c.text('Invalid uploadId', 404);
+
+  const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
+  const bodyStream = c.req.raw.body;
+  if (!bodyStream) return c.text('Missing part body', 400);
+
+  // Hash part on the fly
+  const { md5Hex, stream } = await calculateMD5ForStream(bodyStream);
+
+  const driveService = new GoogleDriveService(
+    c.env.KV,
+    c.env.GOOGLE_CLIENT_ID,
+    c.env.GOOGLE_CLIENT_SECRET,
+    c.env.TOKEN_ENCRYPTION_KEY
+  );
+
+  // Upload part as a separate temporary file inside temp_folder_id in Google Drive
+  const partFileName = `part_${partNumber}`;
+  const uploadUrl = await driveService.initiateResumableUpload(
+    upload.drive_account_id,
+    partFileName,
+    'application/octet-stream',
+    upload.temp_folder_id
+  );
+
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Length': String(contentLength) },
+    body: stream as any
+  });
+
+  if (!response.ok) return c.text('Failed uploading part to Google Drive', 502);
+
+  const rawBody = await response.text();
+  const gFile = JSON.parse(rawBody);
+
+  // Store part state in DB (replace if already exists)
+  await db.prepare(`
+    INSERT OR REPLACE INTO s3_multipart_parts (upload_id, part_number, google_file_id, etag, size)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(uploadId, partNumber, gFile.id, `"${md5Hex}"`, contentLength).run();
+
+  c.header('ETag', `"${md5Hex}"`);
+  return c.text('', 200);
 }
+
+// POST /s3/:bucket/:key (Initiate / Complete Multipart Upload)
+s3Router.post('/:bucket/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  const bucketName = c.req.param('bucket');
+  const key = c.req.param('key');
+  const uploadsParam = c.req.query('uploads');
+  const uploadId = c.req.query('uploadId');
+  const db = c.env.DB;
+
+  const workspace = await db.prepare(`
+    SELECT w.id FROM workspaces w
+    JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.name = ? AND wm.user_id = ?
+  `).bind(bucketName, userId).first<any>();
+
+  if (!workspace) return c.text('Bucket not found', 404);
+
+  const driveService = new GoogleDriveService(
+    c.env.KV,
+    c.env.GOOGLE_CLIENT_ID,
+    c.env.GOOGLE_CLIENT_SECRET,
+    c.env.TOKEN_ENCRYPTION_KEY
+  );
+
+  // 1. Initiate Multipart Upload
+  if (uploadsParam !== undefined) {
+    const uploadId = generateId();
+    
+    // Choose target drive
+    const { results: driveRows } = await db.prepare('SELECT * FROM drive_accounts WHERE user_id = ?').bind(userId).all();
+    if (driveRows.length === 0) return c.text('No connected drives', 400);
+    const targetDrive = mapDriveRow(driveRows[0]);
+
+    // Create temp folder inside Google Drive
+    const tempFolderName = `.omnidrive_multipart_${uploadId}`;
+    const tempFolderId = await driveService.createFolder(targetDrive.id, tempFolderName, targetDrive.rootFolderId || undefined);
+
+    await db.prepare(`
+      INSERT INTO s3_multipart_uploads (upload_id, user_id, workspace_id, key, drive_account_id, temp_folder_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(uploadId, userId, workspace.id, key, targetDrive.id, tempFolderId).run();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<InitiateMultipartUploadResult>
+  <Bucket>${bucketName}</Bucket>
+  <Key>${key}</Key>
+  <UploadId>${uploadId}</UploadId>
+</InitiateMultipartUploadResult>`;
+
+    c.header('Content-Type', 'application/xml');
+    return c.text(xml);
+  }
+
+  // 2. Complete Multipart Upload
+  if (uploadId) {
+    const upload = await db.prepare('SELECT * FROM s3_multipart_uploads WHERE upload_id = ? AND user_id = ?')
+      .bind(uploadId, userId).first<any>();
+    if (!upload) return c.text('Upload session not found', 404);
+
+    // Get all parts ordered by part_number
+    const { results: parts } = await db.prepare(`
+      SELECT * FROM s3_multipart_parts 
+      WHERE upload_id = ? ORDER BY part_number ASC
+    `).bind(uploadId).all<any>();
+
+    if (parts.length === 0) return c.text('No parts found to complete upload', 400);
+
+    const pathParts = key.split('/');
+    const fileName = pathParts.pop();
+    const folderPath = pathParts.join('/');
+    const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+
+    // Compute total size
+    const totalSize = parts.reduce((acc, p) => acc + p.size, 0);
+
+    // Fetch drive account to get its root folder ID
+    const driveAccount = await db.prepare('SELECT * FROM drive_accounts WHERE id = ?').bind(upload.drive_account_id).first<any>();
+    const destFolderId = driveAccount?.root_folder_id || 'root';
+
+    // Initiate final file upload in Google Drive
+    const finalUploadUrl = await driveService.initiateResumableUpload(
+      upload.drive_account_id,
+      fileName!,
+      'application/octet-stream',
+      destFolderId
+    );
+
+    // Stream concatenate all parts
+    // We create a readable stream that pulls parts one-by-one
+    let currentPartIndex = 0;
+    const finalStream = new ReadableStream({
+      async pull(controller) {
+        if (currentPartIndex >= parts.length) {
+          controller.close();
+          return;
+        }
+
+        const part = parts[currentPartIndex];
+        const { stream: partStream } = await driveService.downloadFile(upload.drive_account_id, part.google_file_id);
+        const reader = partStream.getReader();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) controller.enqueue(value);
+        }
+
+        currentPartIndex++;
+      }
+    });
+
+    const response = await fetch(finalUploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Length': String(totalSize) },
+      body: finalStream as any
+    });
+
+    if (!response.ok) return c.text('Final concatenation failed', 502);
+
+    const rawBody = await response.text();
+    const gFile = JSON.parse(rawBody);
+
+    // Check if file already exists in D1 under the same folder/name/workspace
+    const existingFile = await db.prepare(`
+      SELECT id, drive_account_id, google_file_id FROM files
+      WHERE workspace_id = ? AND name = ? AND (workspace_folder_id = ? OR (workspace_folder_id IS NULL AND ? IS NULL))
+        AND is_trashed = 0
+    `).bind(workspace.id, fileName, folderId || null, folderId || null).first<any>();
+
+    // If the file exists, delete it from Google Drive and remove its D1 row to prevent duplicates
+    if (existingFile) {
+      try {
+        await driveService.deleteFile(existingFile.drive_account_id, existingFile.google_file_id);
+      } catch (err) {
+        console.error('Failed to delete old file from Google Drive:', err);
+      }
+      await db.prepare('DELETE FROM files WHERE id = ?').bind(existingFile.id).run();
+    }
+
+    // Insert completed file record into database
+    const fileId = generateId();
+    await db.prepare(`
+      INSERT INTO files (
+        id, user_id, drive_account_id, workspace_id, workspace_folder_id, 
+        google_file_id, name, mime_type, size, google_created_at, google_modified_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).bind(
+      fileId, userId, upload.drive_account_id, workspace.id, folderId || null,
+      gFile.id, fileName, 'application/octet-stream', totalSize
+    ).run();
+
+    // Cleanup: Delete temp parts folder from Google Drive & clean SQLite state
+    await driveService.deleteFile(upload.drive_account_id, upload.temp_folder_id);
+    await db.prepare('DELETE FROM s3_multipart_uploads WHERE upload_id = ?').bind(uploadId).run();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<CompleteMultipartUploadResult>
+  <Location>http://${c.req.header('Host')}/s3/${bucketName}/${key}</Location>
+  <Bucket>${bucketName}</Bucket>
+  <Key>${key}</Key>
+  <ETag>"${fileId}"</ETag>
+</CompleteMultipartUploadResult>`;
+
+    c.header('Content-Type', 'application/xml');
+    return c.text(xml);
+  }
+
+  return c.text('Invalid query parameter sequence', 400);
+});
+

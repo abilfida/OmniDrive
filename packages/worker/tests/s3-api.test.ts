@@ -118,6 +118,9 @@ describe('S3 API compatibility endpoints', () => {
     driveAccounts = [] as any[],
     fileResolved = null as any,
     folderResolved = null as any,
+    multipartUploadResolved = null as any,
+    multipartPartsResolved = [] as any[],
+    driveAccountResolved = null as any,
     sqlQueries = [] as { sql: string; args: any[] }[]
   } = {}) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
@@ -153,6 +156,12 @@ describe('S3 API compatibility endpoints', () => {
                 if (sql.includes('FROM files')) {
                   return fileResolved;
                 }
+                if (sql.includes('FROM s3_multipart_uploads')) {
+                  return multipartUploadResolved;
+                }
+                if (sql.includes('SELECT * FROM drive_accounts WHERE id = ?')) {
+                  return driveAccountResolved || (driveAccounts[0] || null);
+                }
                 return null;
               }),
               all: vi.fn(async () => {
@@ -165,6 +174,9 @@ describe('S3 API compatibility endpoints', () => {
                 if (sql.includes('SELECT * FROM drive_accounts WHERE user_id = ?')) {
                   return { results: driveAccounts };
                 }
+                if (sql.includes('FROM s3_multipart_parts')) {
+                  return { results: multipartPartsResolved };
+                }
                 return { results: [] };
               })
             };
@@ -172,6 +184,7 @@ describe('S3 API compatibility endpoints', () => {
         };
       })
     };
+
 
     return {
       DB: mockDb as any,
@@ -477,6 +490,12 @@ describe('S3 API compatibility endpoints', () => {
     expect(routes.some(r => r.method === 'DELETE' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
     expect(routes.some(r => r.method === 'HEAD' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
   });
+
+  it('defines POST handler on bucket key for multipart operations', () => {
+    const routes = app.routes.filter(r => r.path.startsWith('/s3'));
+    expect(routes.some(r => r.method === 'POST' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
+  });
+
 
   describe('S3 Object CRUD operations', () => {
     it('downloads an object (GetObject)', async () => {
@@ -891,4 +910,284 @@ describe('S3 API compatibility endpoints', () => {
       fetchSpy.mockRestore();
     });
   });
+
+  describe('S3 Multipart Upload sequence (Initiate, UploadPart, Complete)', () => {
+    it('initiates, uploads part, and completes multipart upload', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const driveAccounts = [
+        {
+          id: 'drive-123',
+          user_id: USER_ID,
+          google_account_id: 'google-acc-123',
+          email: 'test@example.com',
+          name: 'Drive Account',
+          type: 'oauth',
+          is_primary: 1,
+          root_folder_id: 'root-folder-123',
+          total_quota: 1000000,
+          used_quota: 100,
+          quota_updated_at: '2026-06-21 12:00:00',
+          sync_status: 'idle',
+          last_synced_at: '2026-06-21 12:00:00',
+          created_at: '2026-06-21 12:00:00'
+        }
+      ];
+
+      // 1. Test Initiate Multipart Upload
+      {
+        const sqlQueries: any[] = [];
+        const env = await getMockEnv({
+          workspaceResolved,
+          driveAccounts,
+          sqlQueries
+        });
+
+        const createFolderSpy = vi.spyOn(GoogleDriveService.prototype, 'createFolder').mockResolvedValue('temp-folder-123');
+
+        const amzDate = '20260621T120000Z';
+        const dateStr = '20260621';
+        const path = '/s3/my-bucket-1/large-file.bin';
+        const queryParams = { uploads: '' };
+        const headers = {
+          'host': 'localhost:8787',
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': sha256('')
+        };
+
+        const { signature, signedHeaders } = calculateSigV4({
+          method: 'POST',
+          path,
+          queryParams,
+          headers,
+          dateStr,
+          amzDate
+        });
+
+        const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+        const res = await app.request(`${path}?uploads`, {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Authorization': authHeader
+          }
+        }, env);
+
+        expect(res.status).toBe(200);
+        const body = await res.text();
+        expect(body).toContain('<InitiateMultipartUploadResult>');
+        expect(body).toContain('<Bucket>my-bucket-1</Bucket>');
+        expect(body).toContain('<Key>large-file.bin</Key>');
+        expect(body).toContain('<UploadId>');
+
+        expect(createFolderSpy).toHaveBeenCalledWith('drive-123', expect.stringContaining('.omnidrive_multipart_'), 'root-folder-123');
+        
+        const insertQuery = sqlQueries.find(q => q.sql.includes('INSERT INTO s3_multipart_uploads'));
+        expect(insertQuery).toBeDefined();
+        expect(insertQuery.args[1]).toBe(USER_ID);
+        expect(insertQuery.args[2]).toBe('ws-1');
+        expect(insertQuery.args[3]).toBe('large-file.bin');
+        expect(insertQuery.args[4]).toBe('drive-123');
+        expect(insertQuery.args[5]).toBe('temp-folder-123');
+
+        createFolderSpy.mockRestore();
+      }
+
+      // 2. Test Upload Part
+      {
+        const sqlQueries: any[] = [];
+        const multipartUploadResolved = {
+          upload_id: 'upload-123',
+          user_id: USER_ID,
+          workspace_id: 'ws-1',
+          key: 'large-file.bin',
+          drive_account_id: 'drive-123',
+          temp_folder_id: 'temp-folder-123'
+        };
+        const env = await getMockEnv({
+          workspaceResolved,
+          driveAccounts,
+          multipartUploadResolved,
+          sqlQueries
+        });
+
+        const initiateSpy = vi.spyOn(GoogleDriveService.prototype, 'initiateResumableUpload').mockResolvedValue('https://example.com/part-upload-url');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+          ok: true,
+          text: async () => JSON.stringify({ id: 'g-part-file-123' })
+        } as Response);
+
+        const partPayload = 'part content';
+        const partMD5 = '5d9e2866a2d0cc0249dad69c33eb7e4a'; // md5('part content')
+
+        const amzDate = '20260621T120000Z';
+        const dateStr = '20260621';
+        const path = '/s3/my-bucket-1/large-file.bin';
+        const queryParams = { uploadId: 'upload-123', partNumber: '1' };
+        const headers = {
+          'host': 'localhost:8787',
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': sha256(partPayload),
+          'content-type': 'application/octet-stream',
+          'content-length': String(partPayload.length)
+        };
+
+        const { signature, signedHeaders } = calculateSigV4({
+          method: 'PUT',
+          path,
+          queryParams,
+          headers,
+          payload: partPayload,
+          dateStr,
+          amzDate
+        });
+
+        const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+        const res = await app.request(`${path}?uploadId=upload-123&partNumber=1`, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Authorization': authHeader
+          },
+          body: partPayload
+        }, env);
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get('ETag')).toBe(`"${partMD5}"`);
+
+        expect(initiateSpy).toHaveBeenCalledWith('drive-123', 'part_1', 'application/octet-stream', 'temp-folder-123');
+
+        const insertPartQuery = sqlQueries.find(q => q.sql.includes('INSERT OR REPLACE INTO s3_multipart_parts'));
+        expect(insertPartQuery).toBeDefined();
+        expect(insertPartQuery.args[0]).toBe('upload-123');
+        expect(insertPartQuery.args[1]).toBe(1);
+        expect(insertPartQuery.args[2]).toBe('g-part-file-123');
+        expect(insertPartQuery.args[3]).toBe(`"${partMD5}"`);
+        expect(insertPartQuery.args[4]).toBe(partPayload.length);
+
+        initiateSpy.mockRestore();
+        fetchSpy.mockRestore();
+      }
+
+      // 3. Test Complete Multipart Upload
+      {
+        const sqlQueries: any[] = [];
+        const multipartUploadResolved = {
+          upload_id: 'upload-123',
+          user_id: USER_ID,
+          workspace_id: 'ws-1',
+          key: 'large-file.bin',
+          drive_account_id: 'drive-123',
+          temp_folder_id: 'temp-folder-123'
+        };
+        const multipartPartsResolved = [
+          {
+            upload_id: 'upload-123',
+            part_number: 1,
+            google_file_id: 'g-part-file-123',
+            etag: '"5d9e2866a2d0cc0249dad69c33eb7e4a"',
+            size: 12
+          }
+        ];
+
+        const env = await getMockEnv({
+          workspaceResolved,
+          driveAccounts,
+          multipartUploadResolved,
+          multipartPartsResolved,
+          sqlQueries
+        });
+
+        const initiateSpy = vi.spyOn(GoogleDriveService.prototype, 'initiateResumableUpload').mockResolvedValue('https://example.com/final-upload-url');
+        const downloadSpy = vi.spyOn(GoogleDriveService.prototype, 'downloadFile').mockResolvedValue({
+          stream: new ReadableStream({
+            start(ctrl) {
+              ctrl.enqueue(new TextEncoder().encode('part content'));
+              ctrl.close();
+            }
+          })
+        });
+        const deleteSpy = vi.spyOn(GoogleDriveService.prototype, 'deleteFile').mockResolvedValue(undefined);
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+          if (url === 'https://example.com/final-upload-url') {
+            // Consume final stream
+            if (init && init.body) {
+              const reader = init.body.getReader();
+              while (true) {
+                const { done } = await reader.read();
+                if (done) break;
+              }
+            }
+            return {
+              ok: true,
+              text: async () => JSON.stringify({ id: 'g-final-file-123' })
+            } as Response;
+          }
+          return { ok: false } as Response;
+        });
+
+        const amzDate = '20260621T120000Z';
+        const dateStr = '20260621';
+        const path = '/s3/my-bucket-1/large-file.bin';
+        const queryParams = { uploadId: 'upload-123' };
+        const headers = {
+          'host': 'localhost:8787',
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': sha256('')
+        };
+
+        const { signature, signedHeaders } = calculateSigV4({
+          method: 'POST',
+          path,
+          queryParams,
+          headers,
+          dateStr,
+          amzDate
+        });
+
+        const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+        const res = await app.request(`${path}?uploadId=upload-123`, {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Authorization': authHeader
+          }
+        }, env);
+
+        expect(res.status).toBe(200);
+        const body = await res.text();
+        expect(body).toContain('<CompleteMultipartUploadResult>');
+        expect(body).toContain('<Bucket>my-bucket-1</Bucket>');
+        expect(body).toContain('<Key>large-file.bin</Key>');
+        expect(body).toContain('<ETag>');
+
+        expect(initiateSpy).toHaveBeenCalledWith('drive-123', 'large-file.bin', 'application/octet-stream', 'root-folder-123');
+        expect(downloadSpy).toHaveBeenCalledWith('drive-123', 'g-part-file-123');
+        expect(deleteSpy).toHaveBeenCalledWith('drive-123', 'temp-folder-123');
+
+        const deleteUploadQuery = sqlQueries.find(q => q.sql.includes('DELETE FROM s3_multipart_uploads WHERE upload_id = ?'));
+        expect(deleteUploadQuery).toBeDefined();
+        expect(deleteUploadQuery.args[0]).toBe('upload-123');
+
+        const insertFileQuery = sqlQueries.find(q => q.sql.includes('INSERT INTO files'));
+        expect(insertFileQuery).toBeDefined();
+        expect(insertFileQuery.args[1]).toBe(USER_ID);
+        expect(insertFileQuery.args[2]).toBe('drive-123');
+        expect(insertFileQuery.args[3]).toBe('ws-1');
+        expect(insertFileQuery.args[5]).toBe('g-final-file-123');
+        expect(insertFileQuery.args[6]).toBe('large-file.bin');
+        expect(insertFileQuery.args[7]).toBe('application/octet-stream');
+        expect(insertFileQuery.args[8]).toBe(12); // size from part 1
+
+        initiateSpy.mockRestore();
+        downloadSpy.mockRestore();
+        deleteSpy.mockRestore();
+        fetchSpy.mockRestore();
+      }
+    });
+  });
 });
+
