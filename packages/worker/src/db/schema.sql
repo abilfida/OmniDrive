@@ -219,3 +219,37 @@ CREATE TABLE IF NOT EXISTS invitation_codes (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_invitation_codes ON invitation_codes(code);
+
+-- Track user generated S3 Credentials
+CREATE TABLE IF NOT EXISTS s3_credentials (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_key_id     TEXT UNIQUE NOT NULL,
+    secret_key_enc    TEXT NOT NULL,
+    description       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_s3_credentials_access_key ON s3_credentials(access_key_id);
+
+-- Track active S3 multipart uploads
+CREATE TABLE IF NOT EXISTS s3_multipart_uploads (
+    upload_id          TEXT PRIMARY KEY,
+    user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id       TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    key                TEXT NOT NULL,
+    drive_account_id   TEXT NOT NULL REFERENCES drive_accounts(id) ON DELETE CASCADE,
+    temp_folder_id     TEXT NOT NULL,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Track uploaded parts for active multipart uploads
+CREATE TABLE IF NOT EXISTS s3_multipart_parts (
+    upload_id          TEXT NOT NULL REFERENCES s3_multipart_uploads(upload_id) ON DELETE CASCADE,
+    part_number        INTEGER NOT NULL,
+    google_file_id     TEXT NOT NULL,
+    etag               TEXT NOT NULL,
+    size               INTEGER NOT NULL,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (upload_id, part_number)
+);
