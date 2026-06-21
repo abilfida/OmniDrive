@@ -3,9 +3,10 @@ import { s3AuthMiddleware } from '../middleware/s3-auth';
 import type { AppContext } from '../types/env';
 import { GoogleDriveService } from '../services/google-drive';
 import { generateId } from '../lib/id';
-import { calculateMD5ForStream, getMD5HashingStream } from '../lib/crypto-s3';
+import { getMD5HashingStream } from '../lib/crypto-s3';
 import { UploadRouter } from '../services/upload-router';
 import { mapDriveRow } from '../types';
+import { createHash } from 'node:crypto';
 
 export const s3Router = new Hono<AppContext>({ strict: false });
 
@@ -481,7 +482,8 @@ async function handleUploadPart(c: any, uploadId: string, partNumber: number): P
   if (!bodyStream) return c.text('Missing part body', 400);
 
   // Hash part on the fly
-  const { md5Hex, stream } = await calculateMD5ForStream(bodyStream);
+  const { stream: hashingStream, getHash } = getMD5HashingStream();
+  const pipedStream = bodyStream.pipeThrough(hashingStream);
 
   const driveService = new GoogleDriveService(
     c.env.KV,
@@ -502,13 +504,15 @@ async function handleUploadPart(c: any, uploadId: string, partNumber: number): P
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Length': String(contentLength) },
-    body: stream as any
+    body: pipedStream as any
   });
 
   if (!response.ok) return c.text('Failed uploading part to Google Drive', 502);
 
   const rawBody = await response.text();
   const gFile = JSON.parse(rawBody);
+
+  const md5Hex = getHash();
 
   // Store part state in DB (replace if already exists)
   await db.prepare(`
@@ -610,24 +614,28 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
     // Stream concatenate all parts
     // We create a readable stream that pulls parts one-by-one
     let currentPartIndex = 0;
+    let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     const finalStream = new ReadableStream({
       async pull(controller) {
-        if (currentPartIndex >= parts.length) {
-          controller.close();
-          return;
+        if (!currentReader) {
+          if (currentPartIndex >= parts.length) {
+            controller.close();
+            return;
+          }
+          const part = parts[currentPartIndex];
+          const { stream: partStream } = await driveService.downloadFile(upload.drive_account_id, part.google_file_id);
+          currentReader = partStream.getReader();
         }
-
-        const part = parts[currentPartIndex];
-        const { stream: partStream } = await driveService.downloadFile(upload.drive_account_id, part.google_file_id);
-        const reader = partStream.getReader();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) controller.enqueue(value);
+        const { done, value } = await currentReader.read();
+        if (done) {
+          currentReader = null;
+          currentPartIndex++;
+          return this.pull!(controller);
         }
-
-        currentPartIndex++;
+        if (value) controller.enqueue(value);
+      },
+      cancel() {
+        if (currentReader) currentReader.cancel();
       }
     });
 
@@ -659,16 +667,23 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
       await db.prepare('DELETE FROM files WHERE id = ?').bind(existingFile.id).run();
     }
 
+    // Calculate S3-compliant ETag
+    const concatenatedMd5s = Buffer.concat(
+      parts.map((p) => Buffer.from(p.etag.replace(/"/g, ''), 'hex'))
+    );
+    const finalMd5 = createHash('md5').update(concatenatedMd5s).digest('hex');
+    const s3Etag = `${finalMd5}-${parts.length}`;
+
     // Insert completed file record into database
     const fileId = generateId();
     await db.prepare(`
       INSERT INTO files (
         id, user_id, drive_account_id, workspace_id, workspace_folder_id, 
-        google_file_id, name, mime_type, size, google_created_at, google_modified_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        google_file_id, name, mime_type, size, metadata, google_created_at, google_modified_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).bind(
       fileId, userId, upload.drive_account_id, workspace.id, folderId || null,
-      gFile.id, fileName, 'application/octet-stream', totalSize
+      gFile.id, fileName, 'application/octet-stream', totalSize, JSON.stringify({ md5: s3Etag })
     ).run();
 
     // Cleanup: Delete temp parts folder from Google Drive & clean SQLite state
@@ -680,7 +695,7 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
   <Location>http://${c.req.header('Host')}/s3/${bucketName}/${key}</Location>
   <Bucket>${bucketName}</Bucket>
   <Key>${key}</Key>
-  <ETag>"${fileId}"</ETag>
+  <ETag>"${s3Etag}"</ETag>
 </CompleteMultipartUploadResult>`;
 
     c.header('Content-Type', 'application/xml');

@@ -1012,10 +1012,23 @@ describe('S3 API compatibility endpoints', () => {
         });
 
         const initiateSpy = vi.spyOn(GoogleDriveService.prototype, 'initiateResumableUpload').mockResolvedValue('https://example.com/part-upload-url');
-        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-          ok: true,
-          text: async () => JSON.stringify({ id: 'g-part-file-123' })
-        } as Response);
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+          if (init && init.body) {
+            if (typeof init.body.getReader === 'function') {
+              const reader = init.body.getReader();
+              while (true) {
+                const { done } = await reader.read();
+                if (done) break;
+              }
+            } else if (typeof init.body[Symbol.asyncIterator] === 'function') {
+              for await (const _ of init.body) {}
+            }
+          }
+          return {
+            ok: true,
+            text: async () => JSON.stringify({ id: 'g-part-file-123' })
+          } as Response;
+        });
 
         const partPayload = 'part content';
         const partMD5 = '5d9e2866a2d0cc0249dad69c33eb7e4a'; // md5('part content')
@@ -1162,7 +1175,7 @@ describe('S3 API compatibility endpoints', () => {
         expect(body).toContain('<CompleteMultipartUploadResult>');
         expect(body).toContain('<Bucket>my-bucket-1</Bucket>');
         expect(body).toContain('<Key>large-file.bin</Key>');
-        expect(body).toContain('<ETag>');
+        expect(body).toContain('<ETag>"5957f540217942ac31a98596f9b61399-1"</ETag>');
 
         expect(initiateSpy).toHaveBeenCalledWith('drive-123', 'large-file.bin', 'application/octet-stream', 'root-folder-123');
         expect(downloadSpy).toHaveBeenCalledWith('drive-123', 'g-part-file-123');
@@ -1181,6 +1194,7 @@ describe('S3 API compatibility endpoints', () => {
         expect(insertFileQuery.args[6]).toBe('large-file.bin');
         expect(insertFileQuery.args[7]).toBe('application/octet-stream');
         expect(insertFileQuery.args[8]).toBe(12); // size from part 1
+        expect(insertFileQuery.args[9]).toBe('{"md5":"5957f540217942ac31a98596f9b61399-1"}');
 
         initiateSpy.mockRestore();
         downloadSpy.mockRestore();
