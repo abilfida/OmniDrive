@@ -150,7 +150,7 @@ describe('S3 API compatibility endpoints', () => {
                 if (sql.includes('SELECT id FROM workspace_folders')) {
                   return folderResolved;
                 }
-                if (sql.includes('SELECT * FROM files')) {
+                if (sql.includes('FROM files')) {
                   return fileResolved;
                 }
                 return null;
@@ -696,6 +696,17 @@ describe('S3 API compatibility endpoints', () => {
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
         if (url === 'https://example.com/upload-url') {
+          if (init && init.body) {
+            if (typeof init.body.getReader === 'function') {
+              const reader = init.body.getReader();
+              while (true) {
+                const { done } = await reader.read();
+                if (done) break;
+              }
+            } else if (typeof init.body[Symbol.asyncIterator] === 'function') {
+              for await (const _ of init.body) {}
+            }
+          }
           return {
             ok: true,
             text: async () => JSON.stringify({ id: 'g-new-file-id' })
@@ -756,6 +767,127 @@ describe('S3 API compatibility endpoints', () => {
       expect(insertQuery.args[8]).toBe(payload.length);
 
       initiateSpy.mockRestore();
+      fetchSpy.mockRestore();
+    });
+
+    it('uploads an object using single-part PUT and replaces duplicate file if exists', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const driveAccounts = [
+        {
+          id: 'drive-123',
+          user_id: USER_ID,
+          google_account_id: 'google-acc-123',
+          email: 'test@example.com',
+          name: 'Drive Account',
+          type: 'oauth',
+          is_primary: 1,
+          root_folder_id: 'root-folder-123',
+          total_quota: 1000000,
+          used_quota: 100,
+          quota_updated_at: '2026-06-21 12:00:00',
+          sync_status: 'idle',
+          last_synced_at: '2026-06-21 12:00:00',
+          created_at: '2026-06-21 12:00:00'
+        }
+      ];
+      // Simulate an existing duplicate file in D1
+      const fileResolved = {
+        id: 'existing-file-123',
+        drive_account_id: 'drive-123',
+        google_file_id: 'g-existing-123',
+        workspace_id: 'ws-1',
+        workspace_folder_id: 'folder-123',
+        name: 'photo.jpg',
+        mime_type: 'image/jpeg',
+        size: 12,
+        is_trashed: 0
+      };
+
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({
+        workspaceResolved,
+        driveAccounts,
+        fileResolved,
+        folderResolved: { id: 'folder-123' },
+        sqlQueries
+      });
+
+      const initiateSpy = vi.spyOn(GoogleDriveService.prototype, 'initiateResumableUpload').mockResolvedValue('https://example.com/upload-url');
+      const deleteSpy = vi.spyOn(GoogleDriveService.prototype, 'deleteFile').mockResolvedValue(undefined);
+
+      const payload = 'hello world';
+      const payloadMD5 = '5eb63bbbe01eeed093cb22bb8f5acdc3';
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+        if (url === 'https://example.com/upload-url') {
+          if (init && init.body) {
+            if (typeof init.body.getReader === 'function') {
+              const reader = init.body.getReader();
+              while (true) {
+                const { done } = await reader.read();
+                if (done) break;
+              }
+            } else if (typeof init.body[Symbol.asyncIterator] === 'function') {
+              for await (const _ of init.body) {}
+            }
+          }
+          return {
+            ok: true,
+            text: async () => JSON.stringify({ id: 'g-new-file-id' })
+          } as Response;
+        }
+        return { ok: false } as Response;
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket-1/photos/holiday/photo.jpg';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256(payload),
+        'content-type': 'text/plain',
+        'content-length': String(payload.length)
+      };
+
+      const { signature, signedHeaders } = calculateSigV4({
+        method: 'PUT',
+        path,
+        headers,
+        payload,
+        dateStr,
+        amzDate
+      });
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Authorization': authHeader
+        },
+        body: payload
+      }, env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('ETag')).toBe(`"${payloadMD5}"`);
+
+      // Verify Google Drive API call to delete the duplicate file was made
+      expect(deleteSpy).toHaveBeenCalledWith('drive-123', 'g-existing-123');
+
+      // Verify D1 query to delete the duplicate file row was executed
+      const deleteQuery = sqlQueries.find(q => q.sql.includes('DELETE FROM files'));
+      expect(deleteQuery).toBeDefined();
+      expect(deleteQuery.args[0]).toBe('existing-file-123');
+
+      const insertQuery = sqlQueries.find(q => q.sql.includes('INSERT INTO files'));
+      expect(insertQuery).toBeDefined();
+      // Check metadata containing md5 is inserted
+      expect(insertQuery.args[9]).toBe(JSON.stringify({ md5: payloadMD5 }));
+
+      initiateSpy.mockRestore();
+      deleteSpy.mockRestore();
       fetchSpy.mockRestore();
     });
   });

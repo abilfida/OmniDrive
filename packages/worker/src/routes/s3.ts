@@ -3,7 +3,7 @@ import { s3AuthMiddleware } from '../middleware/s3-auth';
 import type { AppContext } from '../types/env';
 import { GoogleDriveService } from '../services/google-drive';
 import { generateId } from '../lib/id';
-import { calculateMD5ForStream } from '../lib/crypto-s3';
+import { calculateMD5ForStream, getMD5HashingStream } from '../lib/crypto-s3';
 import { UploadRouter } from '../services/upload-router';
 import { mapDriveRow } from '../types';
 
@@ -37,6 +37,20 @@ function escapeXml(str: string): string {
       default: return c;
     }
   });
+}
+
+function getFileETag(file: { id: string; metadata?: string | null }): string {
+  if (file.metadata) {
+    try {
+      const meta = JSON.parse(file.metadata);
+      if (meta && typeof meta === 'object' && meta.md5) {
+        return meta.md5;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return file.id;
 }
 
 s3Router.use('*', s3AuthMiddleware);
@@ -105,7 +119,7 @@ s3Router.get('/:bucket', async (c) => {
         JOIN folder_path fp ON f.parent_id = fp.id
         WHERE f.workspace_id = ?
     )
-    SELECT f.id, f.name, f.size, f.updated_at, COALESCE(fp.path, '') || f.name as s3_key
+    SELECT f.id, f.name, f.size, f.updated_at, f.metadata, COALESCE(fp.path, '') || f.name as s3_key
     FROM files f
     LEFT JOIN folder_path fp ON f.workspace_folder_id = fp.id
     WHERE f.workspace_id = ? AND f.is_trashed = 0
@@ -129,7 +143,7 @@ s3Router.get('/:bucket', async (c) => {
         contentsXml += `  <Contents>
     <Key>${escapeXml(key)}</Key>
     <LastModified>${escapeXml(parseSqliteDate(file.updated_at).toISOString())}</LastModified>
-    <ETag>"${escapeXml(file.id)}"</ETag>
+    <ETag>"${escapeXml(getFileETag(file))}"</ETag>
     <Size>${file.size}</Size>
     <StorageClass>STANDARD</StorageClass>
   </Contents>\n`;
@@ -139,7 +153,7 @@ s3Router.get('/:bucket', async (c) => {
       contentsXml += `  <Contents>
     <Key>${escapeXml(key)}</Key>
     <LastModified>${escapeXml(parseSqliteDate(file.updated_at).toISOString())}</LastModified>
-    <ETag>"${escapeXml(file.id)}"</ETag>
+    <ETag>"${escapeXml(getFileETag(file))}"</ETag>
     <Size>${file.size}</Size>
     <StorageClass>STANDARD</StorageClass>
   </Contents>\n`;
@@ -164,7 +178,22 @@ ${contentsXml}${prefixesXml}</ListBucketResult>`;
   return c.text(xml, 200, { 'Content-Type': 'application/xml' });
 });
 
-// Helper to resolve virtual folders dynamically
+// Helpers to resolve virtual folders dynamically
+async function getWorkspaceFolder(db: any, workspaceId: string, folderPath: string): Promise<string | null | undefined> {
+  if (!folderPath) return null;
+  const segments = folderPath.split('/').filter(Boolean);
+  let parentId: string | null = null;
+  for (const name of segments) {
+    const existing = await db.prepare(`
+      SELECT id FROM workspace_folders 
+      WHERE workspace_id = ? AND name = ? AND (parent_id = ? OR (parent_id IS NULL AND ? IS NULL))
+    `).bind(workspaceId, name, parentId, parentId).first<any>();
+    if (!existing) return undefined;
+    parentId = existing.id;
+  }
+  return parentId;
+}
+
 async function getOrCreateWorkspaceFolder(db: any, workspaceId: string, folderPath: string): Promise<string | null> {
   if (!folderPath) return null;
   const segments = folderPath.split('/').filter(Boolean);
@@ -210,7 +239,8 @@ s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
   const fileName = pathParts.pop();
   const folderPath = pathParts.join('/');
 
-  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+  const folderId = await getWorkspaceFolder(db, workspace.id, folderPath);
+  if (folderId === undefined) return c.text('Not Found', 404);
 
   const file = await db.prepare(`
     SELECT * FROM files 
@@ -222,7 +252,7 @@ s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
 
   c.header('Content-Type', file.mime_type || 'application/octet-stream');
   c.header('Content-Length', String(file.size));
-  c.header('ETag', `"${file.id}"`);
+  c.header('ETag', `"${getFileETag(file)}"`);
   return c.body(null);
 });
 
@@ -246,7 +276,8 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
   const fileName = pathParts.pop();
   const folderPath = pathParts.join('/');
 
-  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+  const folderId = await getWorkspaceFolder(db, workspace.id, folderPath);
+  if (folderId === undefined) return c.text('Object not found', 404);
 
   const file = await db.prepare(`
     SELECT * FROM files 
@@ -259,7 +290,7 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
   if (c.req.method === 'HEAD') {
     c.header('Content-Type', file.mime_type || 'application/octet-stream');
     c.header('Content-Length', String(file.size));
-    c.header('ETag', `"${file.id}"`);
+    c.header('ETag', `"${getFileETag(file)}"`);
     return c.body(null);
   }
 
@@ -273,6 +304,7 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
   const { stream } = await driveService.downloadFile(file.drive_account_id, file.google_file_id);
   c.header('Content-Type', file.mime_type || 'application/octet-stream');
   c.header('Content-Length', String(file.size));
+  c.header('ETag', `"${getFileETag(file)}"`);
   return c.body(stream);
 });
 
@@ -295,7 +327,8 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
   const fileName = pathParts.pop();
   const folderPath = pathParts.join('/');
 
-  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+  const folderId = await getWorkspaceFolder(db, workspace.id, folderPath);
+  if (folderId === undefined) return c.text('Object not found', 404);
 
   const file = await db.prepare(`
     SELECT * FROM files 
@@ -362,7 +395,8 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const bodyStream = c.req.raw.body;
   if (!bodyStream) return c.text('Empty request body', 400);
 
-  const { md5Hex, stream } = await calculateMD5ForStream(bodyStream);
+  const { stream: hashingStream, getHash } = getMD5HashingStream();
+  const pipedStream = bodyStream.pipeThrough(hashingStream);
 
   // 3. Perform Direct Google Drive Upload
   const driveService = new GoogleDriveService(
@@ -377,6 +411,13 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const folderPath = pathParts.join('/');
   const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
 
+  // Check if file already exists in D1 under the same folder/name/workspace
+  const existingFile = await db.prepare(`
+    SELECT id, drive_account_id, google_file_id FROM files
+    WHERE workspace_id = ? AND name = ? AND (workspace_folder_id = ? OR (workspace_folder_id IS NULL AND ? IS NULL))
+      AND is_trashed = 0
+  `).bind(workspace.id, fileName, folderId || null, folderId || null).first<any>();
+
   // Initiate resumable session
   const uploadUrl = await driveService.initiateResumableUpload(
     targetDrive.id,
@@ -389,7 +430,7 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Length': String(contentLength) },
-    body: stream as any
+    body: pipedStream as any
   });
 
   if (!response.ok) return c.text('Upload to Google Drive failed', 502);
@@ -398,15 +439,28 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const rawBody = await response.text();
   const gFile = JSON.parse(rawBody);
 
+  // Get the calculated MD5 hash after the stream has been fully consumed
+  const md5Hex = getHash();
+
+  // If the file exists, delete it from Google Drive and remove its D1 row to prevent duplicates
+  if (existingFile) {
+    try {
+      await driveService.deleteFile(existingFile.drive_account_id, existingFile.google_file_id);
+    } catch (err) {
+      console.error('Failed to delete old file from Google Drive:', err);
+    }
+    await db.prepare('DELETE FROM files WHERE id = ?').bind(existingFile.id).run();
+  }
+
   const fileId = generateId();
   await db.prepare(`
     INSERT INTO files (
       id, user_id, drive_account_id, workspace_id, workspace_folder_id, 
-      google_file_id, name, mime_type, size, google_created_at, google_modified_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      google_file_id, name, mime_type, size, metadata, google_created_at, google_modified_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).bind(
     fileId, userId, targetDrive.id, workspace.id, folderId || null,
-    gFile.id, fileName, mimeType, contentLength
+    gFile.id, fileName, mimeType, contentLength, JSON.stringify({ md5: md5Hex })
   ).run();
 
   c.header('ETag', `"${md5Hex}"`);

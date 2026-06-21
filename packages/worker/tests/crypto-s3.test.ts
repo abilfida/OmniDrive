@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMD5ForStream, sha256, hmacSha256 } from '../src/lib/crypto-s3';
+import { calculateMD5ForStream, sha256, hmacSha256, getMD5HashingStream } from '../src/lib/crypto-s3';
 
 describe('crypto-s3', () => {
   describe('calculateMD5ForStream', () => {
@@ -56,6 +56,37 @@ describe('crypto-s3', () => {
       const decoder = new TextDecoder();
       const reconstructedText = chunks.map(c => decoder.decode(c)).join('');
       expect(reconstructedText).toBe('chunk1chunk2');
+    });
+  });
+
+  describe('getMD5HashingStream', () => {
+    it('hashes stream on the fly', async () => {
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('hello'));
+          controller.enqueue(encoder.encode(' '));
+          controller.enqueue(encoder.encode('world'));
+          controller.close();
+        }
+      });
+      const { stream, getHash } = getMD5HashingStream();
+      const piped = readable.pipeThrough(stream);
+      
+      const reader = piped.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) chunks.push(value);
+      }
+      
+      const hashVal = getHash();
+      expect(hashVal).toBe('5eb63bbbe01eeed093cb22bb8f5acdc3');
+      
+      const decoder = new TextDecoder();
+      const reconstructedText = chunks.map(c => decoder.decode(c)).join('');
+      expect(reconstructedText).toBe('hello world');
     });
   });
 

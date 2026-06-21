@@ -1,5 +1,16 @@
 import { createHash, createHmac } from 'node:crypto';
 
+export function getMD5HashingStream(): { stream: TransformStream<Uint8Array, Uint8Array>; getHash: () => string } {
+  const hash = createHash('md5');
+  const stream = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      hash.update(chunk);
+      controller.enqueue(chunk);
+    }
+  });
+  return { stream, getHash: () => hash.digest('hex') };
+}
+
 export interface StreamHashingResult {
   stream: ReadableStream<Uint8Array>;
   md5Hex: string;
