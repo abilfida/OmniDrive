@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1] - 2026-06-21
+
+### Fixed
+
+- Fixed Cloudflare Workers production deploy failing with `No such module "node:crypto"` ([error 10021](https://developers.cloudflare.com/workers/observability/errors/#validation-errors-10021)) by upgrading compatibility flag from `nodejs_compat` (polyfill mode) to `nodejs_compat_v2` (actual Node.js built-ins), required for `compatibility_date >= 2024-09-23`.
+- Untracked `wrangler.toml` from `.gitignore` so deployment configuration is now version-controlled and reproducible across environments.
+
 ## [0.9.0] - 2026-06-21
 
 ### Added
