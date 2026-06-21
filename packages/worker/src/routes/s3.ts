@@ -21,6 +21,19 @@ function parseSqliteDate(dateStr: string | number): Date {
   return new Date(dateStr.replace(' ', 'T') + 'Z');
 }
 
+function escapeXml(str: string): string {
+  return str.replace(/[<>&'"]/g, (c) => {
+    switch (c) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '\'': return '&apos;';
+      case '"': return '&quot;';
+      default: return c;
+    }
+  });
+}
+
 s3Router.use('*', s3AuthMiddleware);
 
 // GET /s3/ (List Buckets - maps to workspaces)
@@ -38,16 +51,16 @@ s3Router.get('/', async (c) => {
   let bucketsXml = '';
   for (const ws of workspaces) {
     bucketsXml += `    <Bucket>
-      <Name>${ws.name}</Name>
-      <CreationDate>${parseSqliteDate(ws.created_at).toISOString()}</CreationDate>
+      <Name>${escapeXml(ws.name)}</Name>
+      <CreationDate>${escapeXml(parseSqliteDate(ws.created_at).toISOString())}</CreationDate>
     </Bucket>\n`;
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ListAllMyBucketsResult>
   <Owner>
-    <ID>${userId}</ID>
-    <DisplayName>${userId}</DisplayName>
+    <ID>${escapeXml(userId)}</ID>
+    <DisplayName>${escapeXml(userId)}</DisplayName>
   </Owner>
   <Buckets>
 ${bucketsXml}  </Buckets>
@@ -72,7 +85,9 @@ s3Router.get('/:bucket', async (c) => {
   `).bind(bucketName, userId).first<any>();
 
   if (!workspace) {
-    return c.text(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>Bucket not found</Message></Error>`, 404, { 'Content-Type': 'application/xml' });
+    const errorCode = 'NoSuchBucket';
+    const errorMessage = 'Bucket not found';
+    return c.text(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>${escapeXml(errorCode)}</Code><Message>${escapeXml(errorMessage)}</Message></Error>`, 404, { 'Content-Type': 'application/xml' });
   }
 
   // Recursive SQLite CTE to assemble flat S3 keys for all workspace files
@@ -107,9 +122,9 @@ s3Router.get('/:bucket', async (c) => {
       } else {
         // Immediate File
         contentsXml += `  <Contents>
-    <Key>${key}</Key>
-    <LastModified>${parseSqliteDate(file.updated_at).toISOString()}</LastModified>
-    <ETag>"${file.id}"</ETag>
+    <Key>${escapeXml(key)}</Key>
+    <LastModified>${escapeXml(parseSqliteDate(file.updated_at).toISOString())}</LastModified>
+    <ETag>"${escapeXml(file.id)}"</ETag>
     <Size>${file.size}</Size>
     <StorageClass>STANDARD</StorageClass>
   </Contents>\n`;
@@ -117,9 +132,9 @@ s3Router.get('/:bucket', async (c) => {
     } else {
       // Recursive List (No Delimiter)
       contentsXml += `  <Contents>
-    <Key>${key}</Key>
-    <LastModified>${parseSqliteDate(file.updated_at).toISOString()}</LastModified>
-    <ETag>"${file.id}"</ETag>
+    <Key>${escapeXml(key)}</Key>
+    <LastModified>${escapeXml(parseSqliteDate(file.updated_at).toISOString())}</LastModified>
+    <ETag>"${escapeXml(file.id)}"</ETag>
     <Size>${file.size}</Size>
     <StorageClass>STANDARD</StorageClass>
   </Contents>\n`;
@@ -129,14 +144,14 @@ s3Router.get('/:bucket', async (c) => {
   let prefixesXml = '';
   for (const pref of commonPrefixesSet) {
     prefixesXml += `  <CommonPrefixes>
-    <Prefix>${pref}</Prefix>
+    <Prefix>${escapeXml(pref)}</Prefix>
   </CommonPrefixes>\n`;
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult>
-  <Name>${bucketName}</Name>
-  <Prefix>${prefix}</Prefix>
+  <Name>${escapeXml(bucketName)}</Name>
+  <Prefix>${escapeXml(prefix)}</Prefix>
   <MaxKeys>1000</MaxKeys>
   <IsTruncated>false</IsTruncated>
 ${contentsXml}${prefixesXml}</ListBucketResult>`;

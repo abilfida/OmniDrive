@@ -112,7 +112,8 @@ describe('S3 API compatibility endpoints', () => {
   const getMockEnv = async ({
     workspaces = [] as any[],
     workspaceResolved = null as any,
-    files = [] as any[]
+    files = [] as any[],
+    userId = USER_ID
   } = {}) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
 
@@ -126,7 +127,7 @@ describe('S3 API compatibility endpoints', () => {
                   if (args[0] === ACCESS_KEY_ID) {
                     return {
                       id: 'cred-123',
-                      user_id: USER_ID,
+                      user_id: userId,
                       access_key_id: ACCESS_KEY_ID,
                       secret_key_enc: encryptedSecret,
                       description: 'Test Credential'
@@ -365,5 +366,81 @@ describe('S3 API compatibility endpoints', () => {
     expect(body).not.toContain('<Key>documents/archive/notes.txt</Key>');
     expect(body).toContain('<CommonPrefixes>');
     expect(body).toContain('<Prefix>documents/archive/</Prefix>');
+  });
+
+  it('escapes special XML characters in S3 ListBuckets, ListObjectsV2, and Errors responses', async () => {
+    // 1. ListBuckets XML escaping check
+    const workspaces = [
+      { id: 'ws-1', name: 'my-<bucket>&"-1', created_at: '2026-06-21 10:00:00' }
+    ];
+    const weirdUserId = 'user-<id>&"\'';
+    const envBuckets = await getMockEnv({ workspaces, userId: weirdUserId });
+
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    
+    let path = '/s3/';
+    let headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    let sigResult = calculateSigV4({
+      method: 'GET',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    let authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${sigResult.signedHeaders}, Signature=${sigResult.signature}`;
+
+    let res = await app.request(path, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, envBuckets);
+
+    expect(res.status).toBe(200);
+    let body = await res.text();
+    expect(body).toContain('<Name>my-&lt;bucket&gt;&amp;&quot;-1</Name>');
+    expect(body).toContain(`<ID>user-&lt;id&gt;&amp;&quot;&apos;</ID>`);
+    expect(body).toContain(`<DisplayName>user-&lt;id&gt;&amp;&quot;&apos;</DisplayName>`);
+
+    // 2. ListObjectsV2 XML escaping check
+    const workspaceResolved = { id: 'ws-1' };
+    const files = [
+      { id: 'f-<1>&"\'', name: 'photo-<1>&"\'.jpg', size: 1024, updated_at: '2026-06-21 11:30:00', s3_key: 'photo-<1>&"\'.jpg' }
+    ];
+    const envObjects = await getMockEnv({ workspaceResolved, files, userId: weirdUserId });
+    
+    path = '/s3/my-%3Cbucket%3E%26%22-1'; // url encoded my-<bucket>&"-1
+    
+    sigResult = calculateSigV4({
+      method: 'GET',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${sigResult.signedHeaders}, Signature=${sigResult.signature}`;
+
+    res = await app.request(path, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, envObjects);
+
+    expect(res.status).toBe(200);
+    body = await res.text();
+    expect(body).toContain('<Name>my-&lt;bucket&gt;&amp;&quot;-1</Name>');
+    expect(body).toContain('<Key>photo-&lt;1&gt;&amp;&quot;&apos;.jpg</Key>');
+    expect(body).toContain('<ETag>"f-&lt;1&gt;&amp;&quot;&apos;"</ETag>');
   });
 });
