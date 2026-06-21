@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { app } from '../src/index';
 import { encrypt } from '../src/lib/crypto';
 import { hmacSha256, sha256 } from '../src/lib/crypto-s3';
+import { GoogleDriveService } from '../src/services/google-drive';
 
 const TOKEN_ENCRYPTION_KEY = 'test-token-encryption-key-which-is-long-enough';
 const ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
@@ -113,7 +114,11 @@ describe('S3 API compatibility endpoints', () => {
     workspaces = [] as any[],
     workspaceResolved = null as any,
     files = [] as any[],
-    userId = USER_ID
+    userId = USER_ID,
+    driveAccounts = [] as any[],
+    fileResolved = null as any,
+    folderResolved = null as any,
+    sqlQueries = [] as { sql: string; args: any[] }[]
   } = {}) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
 
@@ -121,7 +126,11 @@ describe('S3 API compatibility endpoints', () => {
       prepare: vi.fn((sql: string) => {
         return {
           bind: vi.fn((...args: any[]) => {
+            sqlQueries.push({ sql: sql.trim().replace(/\s+/g, ' '), args });
             return {
+              run: vi.fn(async () => {
+                return { success: true };
+              }),
               first: vi.fn(async () => {
                 if (sql.includes('SELECT * FROM s3_credentials WHERE access_key_id = ?')) {
                   if (args[0] === ACCESS_KEY_ID) {
@@ -138,6 +147,12 @@ describe('S3 API compatibility endpoints', () => {
                   // Resolve workspace
                   return workspaceResolved;
                 }
+                if (sql.includes('SELECT id FROM workspace_folders')) {
+                  return folderResolved;
+                }
+                if (sql.includes('SELECT * FROM files')) {
+                  return fileResolved;
+                }
                 return null;
               }),
               all: vi.fn(async () => {
@@ -146,6 +161,9 @@ describe('S3 API compatibility endpoints', () => {
                 }
                 if (sql.includes('WITH RECURSIVE folder_path')) {
                   return { results: files };
+                }
+                if (sql.includes('SELECT * FROM drive_accounts WHERE user_id = ?')) {
+                  return { results: driveAccounts };
                 }
                 return { results: [] };
               })
@@ -157,7 +175,14 @@ describe('S3 API compatibility endpoints', () => {
 
     return {
       DB: mockDb as any,
-      KV: {} as any,
+      KV: {
+        get: vi.fn().mockResolvedValue(JSON.stringify({
+          accessToken: 'fake-access-token',
+          refreshToken: 'fake-refresh-token',
+          expiresAt: Date.now() + 3600_000,
+        })),
+        put: vi.fn().mockResolvedValue(undefined),
+      } as any,
       GOOGLE_CLIENT_ID: 'google-id',
       GOOGLE_CLIENT_SECRET: 'google-secret',
       FRONTEND_URL: 'http://localhost:3000',
@@ -442,5 +467,296 @@ describe('S3 API compatibility endpoints', () => {
     expect(body).toContain('<Name>my-&lt;bucket&gt;&amp;&quot;-1</Name>');
     expect(body).toContain('<Key>photo-&lt;1&gt;&amp;&quot;&apos;.jpg</Key>');
     expect(body).toContain('<ETag>"f-&lt;1&gt;&amp;&quot;&apos;"</ETag>');
+  });
+
+  it('defines handler routes for GET, PUT, DELETE, and HEAD objects', () => {
+    // This verifies route patterns are matched inside Hono
+    const routes = app.routes.filter(r => r.path.startsWith('/s3'));
+    expect(routes.some(r => r.method === 'GET' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
+    expect(routes.some(r => r.method === 'PUT' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
+    expect(routes.some(r => r.method === 'DELETE' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
+    expect(routes.some(r => r.method === 'HEAD' && r.path === '/s3/:bucket/:key{.+}')).toBe(true);
+  });
+
+  describe('S3 Object CRUD operations', () => {
+    it('downloads an object (GetObject)', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const fileResolved = {
+        id: 'file-123',
+        drive_account_id: 'drive-123',
+        google_file_id: 'g-123',
+        workspace_id: 'ws-1',
+        workspace_folder_id: 'folder-123',
+        name: 'photo.jpg',
+        mime_type: 'image/jpeg',
+        size: 12,
+        is_trashed: 0
+      };
+      
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({
+        workspaceResolved,
+        fileResolved,
+        folderResolved: { id: 'folder-123' },
+        sqlQueries
+      });
+
+      const downloadSpy = vi.spyOn(GoogleDriveService.prototype, 'downloadFile').mockResolvedValue({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('file content'));
+            controller.close();
+          }
+        })
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket-1/photos/holiday/photo.jpg';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+
+      const { signature, signedHeaders } = calculateSigV4({
+        method: 'GET',
+        path,
+        headers,
+        dateStr,
+        amzDate
+      });
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'GET',
+        headers: {
+          ...headers,
+          'Authorization': authHeader
+        }
+      }, env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Content-Type')).toBe('image/jpeg');
+      expect(res.headers.get('Content-Length')).toBe('12');
+      const body = await res.text();
+      expect(body).toBe('file content');
+      expect(downloadSpy).toHaveBeenCalledWith('drive-123', 'g-123');
+      downloadSpy.mockRestore();
+    });
+
+    it('retrieves metadata of an object (HeadObject)', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const fileResolved = {
+        id: 'file-123',
+        drive_account_id: 'drive-123',
+        google_file_id: 'g-123',
+        workspace_id: 'ws-1',
+        workspace_folder_id: 'folder-123',
+        name: 'photo.jpg',
+        mime_type: 'image/jpeg',
+        size: 12,
+        is_trashed: 0
+      };
+
+      const env = await getMockEnv({
+        workspaceResolved,
+        fileResolved,
+        folderResolved: { id: 'folder-123' }
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket-1/photos/holiday/photo.jpg';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+
+      const { signature, signedHeaders } = calculateSigV4({
+        method: 'HEAD',
+        path,
+        headers,
+        dateStr,
+        amzDate
+      });
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'HEAD',
+        headers: {
+          ...headers,
+          'Authorization': authHeader
+        }
+      }, env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Content-Type')).toBe('image/jpeg');
+      expect(res.headers.get('Content-Length')).toBe('12');
+      expect(res.headers.get('ETag')).toBe('"file-123"');
+    });
+
+    it('deletes an object (DeleteObject)', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const fileResolved = {
+        id: 'file-123',
+        drive_account_id: 'drive-123',
+        google_file_id: 'g-123',
+        workspace_id: 'ws-1',
+        workspace_folder_id: 'folder-123',
+        name: 'photo.jpg',
+        mime_type: 'image/jpeg',
+        size: 12,
+        is_trashed: 0
+      };
+
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({
+        workspaceResolved,
+        fileResolved,
+        folderResolved: { id: 'folder-123' },
+        sqlQueries
+      });
+
+      const deleteSpy = vi.spyOn(GoogleDriveService.prototype, 'deleteFile').mockResolvedValue(undefined);
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket-1/photos/holiday/photo.jpg';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+
+      const { signature, signedHeaders } = calculateSigV4({
+        method: 'DELETE',
+        path,
+        headers,
+        dateStr,
+        amzDate
+      });
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'DELETE',
+        headers: {
+          ...headers,
+          'Authorization': authHeader
+        }
+      }, env);
+
+      expect(res.status).toBe(204);
+      expect(deleteSpy).toHaveBeenCalledWith('drive-123', 'g-123');
+      
+      const updateQuery = sqlQueries.find(q => q.sql.includes('UPDATE files SET is_trashed = 1'));
+      expect(updateQuery).toBeDefined();
+      expect(updateQuery.args[0]).toBe('file-123');
+
+      deleteSpy.mockRestore();
+    });
+
+    it('uploads an object using single-part PUT (PutObject)', async () => {
+      const workspaceResolved = { id: 'ws-1' };
+      const driveAccounts = [
+        {
+          id: 'drive-123',
+          user_id: USER_ID,
+          google_account_id: 'google-acc-123',
+          email: 'test@example.com',
+          name: 'Drive Account',
+          type: 'oauth',
+          is_primary: 1,
+          root_folder_id: 'root-folder-123',
+          total_quota: 1000000,
+          used_quota: 100,
+          quota_updated_at: '2026-06-21 12:00:00',
+          sync_status: 'idle',
+          last_synced_at: '2026-06-21 12:00:00',
+          created_at: '2026-06-21 12:00:00'
+        }
+      ];
+
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({
+        workspaceResolved,
+        driveAccounts,
+        folderResolved: { id: 'folder-123' },
+        sqlQueries
+      });
+
+      const initiateSpy = vi.spyOn(GoogleDriveService.prototype, 'initiateResumableUpload').mockResolvedValue('https://example.com/upload-url');
+
+      const payload = 'hello world';
+      const payloadMD5 = '5eb63bbbe01eeed093cb22bb8f5acdc3';
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+        if (url === 'https://example.com/upload-url') {
+          return {
+            ok: true,
+            text: async () => JSON.stringify({ id: 'g-new-file-id' })
+          } as Response;
+        }
+        return { ok: false } as Response;
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket-1/photos/holiday/photo.jpg';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256(payload),
+        'content-type': 'text/plain',
+        'content-length': String(payload.length)
+      };
+
+      const { signature, signedHeaders } = calculateSigV4({
+        method: 'PUT',
+        path,
+        headers,
+        payload,
+        dateStr,
+        amzDate
+      });
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Authorization': authHeader
+        },
+        body: payload
+      }, env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('ETag')).toBe(`"${payloadMD5}"`);
+
+      expect(initiateSpy).toHaveBeenCalledWith('drive-123', 'photo.jpg', 'text/plain', 'root-folder-123');
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/upload-url', expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ 'Content-Length': String(payload.length) })
+      }));
+
+      const insertQuery = sqlQueries.find(q => q.sql.includes('INSERT INTO files'));
+      expect(insertQuery).toBeDefined();
+      expect(insertQuery.args[1]).toBe(USER_ID);
+      expect(insertQuery.args[2]).toBe('drive-123');
+      expect(insertQuery.args[3]).toBe('ws-1');
+      expect(insertQuery.args[4]).toBe('folder-123');
+      expect(insertQuery.args[5]).toBe('g-new-file-id');
+      expect(insertQuery.args[6]).toBe('photo.jpg');
+      expect(insertQuery.args[7]).toBe('text/plain');
+      expect(insertQuery.args[8]).toBe(payload.length);
+
+      initiateSpy.mockRestore();
+      fetchSpy.mockRestore();
+    });
   });
 });

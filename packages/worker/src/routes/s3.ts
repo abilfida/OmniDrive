@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { s3AuthMiddleware } from '../middleware/s3-auth';
 import type { AppContext } from '../types/env';
+import { GoogleDriveService } from '../services/google-drive';
+import { generateId } from '../lib/id';
+import { calculateMD5ForStream } from '../lib/crypto-s3';
+import { UploadRouter } from '../services/upload-router';
+import { mapDriveRow } from '../types';
 
 export const s3Router = new Hono<AppContext>({ strict: false });
 
@@ -158,3 +163,257 @@ ${contentsXml}${prefixesXml}</ListBucketResult>`;
 
   return c.text(xml, 200, { 'Content-Type': 'application/xml' });
 });
+
+// Helper to resolve virtual folders dynamically
+async function getOrCreateWorkspaceFolder(db: any, workspaceId: string, folderPath: string): Promise<string | null> {
+  if (!folderPath) return null;
+  const segments = folderPath.split('/').filter(Boolean);
+  let parentId: string | null = null;
+
+  for (const name of segments) {
+    const existing = await db.prepare(`
+      SELECT id FROM workspace_folders 
+      WHERE workspace_id = ? AND name = ? AND (parent_id = ? OR (parent_id IS NULL AND ? IS NULL))
+    `).bind(workspaceId, name, parentId, parentId).first<any>();
+
+    if (existing) {
+      parentId = existing.id;
+    } else {
+      const newId = generateId();
+      await db.prepare(`
+        INSERT INTO workspace_folders (id, workspace_id, name, parent_id)
+        VALUES (?, ?, ?, ?)
+      `).bind(newId, workspaceId, name, parentId).run();
+      parentId = newId;
+    }
+  }
+
+  return parentId;
+}
+
+// HEAD /s3/:bucket/:key (HeadObject - Get Metadata)
+s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  const bucketName = c.req.param('bucket');
+  const key = c.req.param('key');
+  const db = c.env.DB;
+
+  const workspace = await db.prepare(`
+    SELECT w.id FROM workspaces w
+    JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.name = ? AND wm.user_id = ?
+  `).bind(bucketName, userId).first<any>();
+
+  if (!workspace) return c.text('Not Found', 404);
+
+  const pathParts = key.split('/');
+  const fileName = pathParts.pop();
+  const folderPath = pathParts.join('/');
+
+  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+
+  const file = await db.prepare(`
+    SELECT * FROM files 
+    WHERE workspace_id = ? AND name = ? AND (workspace_folder_id = ? OR (workspace_folder_id IS NULL AND ? IS NULL))
+      AND is_trashed = 0
+  `).bind(workspace.id, fileName, folderId, folderId).first<any>();
+
+  if (!file) return c.text('Not Found', 404);
+
+  c.header('Content-Type', file.mime_type || 'application/octet-stream');
+  c.header('Content-Length', String(file.size));
+  c.header('ETag', `"${file.id}"`);
+  return c.body(null);
+});
+
+// GET /s3/:bucket/:key (GetObject - Download)
+s3Router.get('/:bucket/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  const bucketName = c.req.param('bucket');
+  const key = c.req.param('key');
+  const db = c.env.DB;
+
+  const workspace = await db.prepare(`
+    SELECT w.id FROM workspaces w
+    JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.name = ? AND wm.user_id = ?
+  `).bind(bucketName, userId).first<any>();
+
+  if (!workspace) return c.text('Bucket not found', 404);
+
+  // Split S3 key to locate file
+  const pathParts = key.split('/');
+  const fileName = pathParts.pop();
+  const folderPath = pathParts.join('/');
+
+  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+
+  const file = await db.prepare(`
+    SELECT * FROM files 
+    WHERE workspace_id = ? AND name = ? AND (workspace_folder_id = ? OR (workspace_folder_id IS NULL AND ? IS NULL))
+      AND is_trashed = 0
+  `).bind(workspace.id, fileName, folderId, folderId).first<any>();
+
+  if (!file) return c.text('Object not found', 404);
+
+  if (c.req.method === 'HEAD') {
+    c.header('Content-Type', file.mime_type || 'application/octet-stream');
+    c.header('Content-Length', String(file.size));
+    c.header('ETag', `"${file.id}"`);
+    return c.body(null);
+  }
+
+  const driveService = new GoogleDriveService(
+    c.env.KV,
+    c.env.GOOGLE_CLIENT_ID,
+    c.env.GOOGLE_CLIENT_SECRET,
+    c.env.TOKEN_ENCRYPTION_KEY
+  );
+
+  const { stream } = await driveService.downloadFile(file.drive_account_id, file.google_file_id);
+  c.header('Content-Type', file.mime_type || 'application/octet-stream');
+  c.header('Content-Length', String(file.size));
+  return c.body(stream);
+});
+
+// DELETE /s3/:bucket/:key (DeleteObject)
+s3Router.delete('/:bucket/:key{.+}', async (c) => {
+  const userId = c.get('userId');
+  const bucketName = c.req.param('bucket');
+  const key = c.req.param('key');
+  const db = c.env.DB;
+
+  const workspace = await db.prepare(`
+    SELECT w.id FROM workspaces w
+    JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.name = ? AND wm.user_id = ?
+  `).bind(bucketName, userId).first<any>();
+
+  if (!workspace) return c.text('Bucket not found', 404);
+
+  const pathParts = key.split('/');
+  const fileName = pathParts.pop();
+  const folderPath = pathParts.join('/');
+
+  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+
+  const file = await db.prepare(`
+    SELECT * FROM files 
+    WHERE workspace_id = ? AND name = ? AND (workspace_folder_id = ? OR (workspace_folder_id IS NULL AND ? IS NULL))
+      AND is_trashed = 0
+  `).bind(workspace.id, fileName, folderId, folderId).first<any>();
+
+  if (!file) return c.text('Object not found', 404);
+
+  const driveService = new GoogleDriveService(
+    c.env.KV,
+    c.env.GOOGLE_CLIENT_ID,
+    c.env.GOOGLE_CLIENT_SECRET,
+    c.env.TOKEN_ENCRYPTION_KEY
+  );
+
+  // Trash/delete file in Google Drive and update SQLite
+  await driveService.deleteFile(file.drive_account_id, file.google_file_id);
+  await db.prepare('UPDATE files SET is_trashed = 1 WHERE id = ?').bind(file.id).run();
+
+  return c.body(null, 204);
+});
+
+// PUT /s3/:bucket/:key (PutObject or UploadPart)
+s3Router.put('/:bucket/:key{.+}', async (c) => {
+  const uploadId = c.req.query('uploadId');
+  const partNumberStr = c.req.query('partNumber');
+
+  if (uploadId && partNumberStr) {
+    // Handled in Task 7 (Upload Part)
+    return handleUploadPart(c, uploadId, parseInt(partNumberStr, 10));
+  }
+
+  const userId = c.get('userId');
+  const bucketName = c.req.param('bucket');
+  const key = c.req.param('key');
+  const db = c.env.DB;
+
+  const workspace = await db.prepare(`
+    SELECT w.id FROM workspaces w
+    JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.name = ? AND wm.user_id = ?
+  `).bind(bucketName, userId).first<any>();
+
+  if (!workspace) return c.text('Bucket not found', 404);
+
+  const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
+  const mimeType = c.req.header('Content-Type') || 'application/octet-stream';
+
+  // 1. Select target Drive using UploadRouter
+  const { results: driveRows } = await db.prepare('SELECT * FROM drive_accounts WHERE user_id = ?').bind(userId).all();
+  if (driveRows.length === 0) return c.text('No connected drives', 400);
+
+  const drives = driveRows.map(mapDriveRow).map((d) => ({
+    ...d,
+    freeSpace: Math.max(0, d.totalQuota - d.usedQuota),
+    usagePercent: d.totalQuota > 0 ? (d.usedQuota / d.totalQuota) * 100 : 0
+  }));
+
+  const router = new UploadRouter(drives);
+  const targetDrive = router.selectDriveForUpload(contentLength);
+
+  // 2. Hash data on-the-fly to get ETag
+  const bodyStream = c.req.raw.body;
+  if (!bodyStream) return c.text('Empty request body', 400);
+
+  const { md5Hex, stream } = await calculateMD5ForStream(bodyStream);
+
+  // 3. Perform Direct Google Drive Upload
+  const driveService = new GoogleDriveService(
+    c.env.KV,
+    c.env.GOOGLE_CLIENT_ID,
+    c.env.GOOGLE_CLIENT_SECRET,
+    c.env.TOKEN_ENCRYPTION_KEY
+  );
+
+  const pathParts = key.split('/');
+  const fileName = pathParts.pop();
+  const folderPath = pathParts.join('/');
+  const folderId = await getOrCreateWorkspaceFolder(db, workspace.id, folderPath);
+
+  // Initiate resumable session
+  const uploadUrl = await driveService.initiateResumableUpload(
+    targetDrive.id,
+    fileName!,
+    mimeType,
+    targetDrive.rootFolderId || 'root'
+  );
+
+  // Pipe the hashed stream
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Length': String(contentLength) },
+    body: stream as any
+  });
+
+  if (!response.ok) return c.text('Upload to Google Drive failed', 502);
+
+  // Get Google File ID from response headers / body
+  const rawBody = await response.text();
+  const gFile = JSON.parse(rawBody);
+
+  const fileId = generateId();
+  await db.prepare(`
+    INSERT INTO files (
+      id, user_id, drive_account_id, workspace_id, workspace_folder_id, 
+      google_file_id, name, mime_type, size, google_created_at, google_modified_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).bind(
+    fileId, userId, targetDrive.id, workspace.id, folderId || null,
+    gFile.id, fileName, mimeType, contentLength
+  ).run();
+
+  c.header('ETag', `"${md5Hex}"`);
+  return c.text('', 200);
+});
+
+// Placeholder helper to keep compiler happy until Task 7 is written
+async function handleUploadPart(c: any, uploadId: string, partNumber: number): Promise<Response> {
+  return c.text('Multipart Upload Part not implemented yet', 501);
+}
