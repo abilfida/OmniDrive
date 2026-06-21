@@ -108,7 +108,7 @@ describe('S3 Credentials API', () => {
     }, env);
 
     expect(postRes.status).toBe(201);
-    const postBody = await postRes.json();
+    const postBody = await postRes.json() as any;
     expect(postBody.id).toBeDefined();
     expect(postBody.accessKeyId).toBeDefined();
     expect(postBody.secretAccessKey).toBeDefined();
@@ -129,7 +129,7 @@ describe('S3 Credentials API', () => {
       }
     }, env);
     expect(getRes.status).toBe(200);
-    const getBody = await getRes.json();
+    const getBody = await getRes.json() as any;
     expect(getBody).toBeInstanceOf(Array);
     expect(getBody[0].id).toBe('cred-123');
 
@@ -142,7 +142,7 @@ describe('S3 Credentials API', () => {
       }
     }, env);
     expect(deleteRes.status).toBe(200);
-    const deleteBody = await deleteRes.json();
+    const deleteBody = await deleteRes.json() as any;
     expect(deleteBody.success).toBe(true);
     expect(deletedId).toBe('cred-123');
   });
