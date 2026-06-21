@@ -1,0 +1,33 @@
+name = "omnidrive-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = [ "nodejs_compat_v2" ]
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omnidrive"
+database_id = "72bd51b7-0869-4ead-9712-a76237904d81"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "e1938e5a2fce4999bd1556612cccfeaa"
+
+[vars]
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
