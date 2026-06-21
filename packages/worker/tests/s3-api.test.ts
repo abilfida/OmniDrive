@@ -1203,5 +1203,162 @@ describe('S3 API compatibility endpoints', () => {
       }
     });
   });
-});
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // TDD: Untested error paths & edge cases
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('S3 error paths (GetObject, HeadObject, DeleteObject)', () => {
+    async function makeSignedRequest(method: string, path: string, env: any) {
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+      const { signature, signedHeaders } = calculateSigV4({ method, path, headers, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+      return app.request(path, {
+        method,
+        headers: { ...headers, Authorization: authHeader }
+      }, env);
+    }
+
+    it('returns 404 XML error when GetObject key does not exist', async () => {
+      const env = await getMockEnv({ workspaceResolved: { id: 'ws-1' }, fileResolved: null });
+      const res = await makeSignedRequest('GET', '/s3/my-bucket/missing-file.txt', env);
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toContain('<Code>NoSuchKey</Code>');
+    });
+
+    it('returns 404 XML error when HeadObject key does not exist', async () => {
+      const env = await getMockEnv({ workspaceResolved: { id: 'ws-1' }, fileResolved: null });
+      const res = await makeSignedRequest('HEAD', '/s3/my-bucket/missing-file.txt', env);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 XML error when DeleteObject key does not exist', async () => {
+      const env = await getMockEnv({ workspaceResolved: { id: 'ws-1' }, fileResolved: null });
+      const res = await makeSignedRequest('DELETE', '/s3/my-bucket/missing-file.txt', env);
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toContain('<Code>NoSuchKey</Code>');
+    });
+  });
+
+  describe('S3 Multipart Upload edge cases', () => {
+    it('returns 404 XML NoSuchUpload when aborting a non-existent multipart upload', async () => {
+      const env = await getMockEnv({
+        workspaceResolved: { id: 'ws-1' },
+        multipartUploadResolved: null
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket/large-file.bin';
+      const queryParams = { uploadId: 'non-existent-upload' };
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+      const { signature, signedHeaders } = calculateSigV4({ method: 'DELETE', path, queryParams, headers, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(`${path}?uploadId=non-existent-upload`, {
+        method: 'DELETE',
+        headers: { ...headers, Authorization: authHeader }
+      }, env);
+
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toContain('<Code>NoSuchUpload</Code>');
+    });
+
+    it('returns 400 when completing a multipart upload with zero parts', async () => {
+      const env = await getMockEnv({
+        workspaceResolved: { id: 'ws-1' },
+        multipartUploadResolved: {
+          upload_id: 'upload-empty',
+          user_id: USER_ID,
+          workspace_id: 'ws-1',
+          key: 'large-file.bin',
+          drive_account_id: 'drive-123',
+          temp_folder_id: 'temp-folder-123'
+        },
+        multipartPartsResolved: [] // no parts uploaded
+      });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket/large-file.bin';
+      const queryParams = { uploadId: 'upload-empty' };
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+      const { signature, signedHeaders } = calculateSigV4({ method: 'POST', path, queryParams, headers, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(`${path}?uploadId=upload-empty`, {
+        method: 'POST',
+        headers: { ...headers, Authorization: authHeader }
+      }, env);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when POST to object key has neither ?uploads nor ?uploadId', async () => {
+      const env = await getMockEnv({ workspaceResolved: { id: 'ws-1' } });
+
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket/file.bin';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256('')
+      };
+      const { signature, signedHeaders } = calculateSigV4({ method: 'POST', path, headers, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'POST',
+        headers: { ...headers, Authorization: authHeader }
+      }, env);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when PutObject has no connected drives', async () => {
+      const env = await getMockEnv({
+        workspaceResolved: { id: 'ws-1' },
+        driveAccounts: [] // no drives connected
+      });
+
+      const payload = 'file content';
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const path = '/s3/my-bucket/file.txt';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256(payload),
+        'content-length': String(payload.length)
+      };
+      const { signature, signedHeaders } = calculateSigV4({ method: 'PUT', path, headers, payload, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await app.request(path, {
+        method: 'PUT',
+        headers: { ...headers, Authorization: authHeader },
+        body: payload
+      }, env);
+
+      expect(res.status).toBe(400);
+    });
+  });
+});

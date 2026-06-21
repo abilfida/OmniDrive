@@ -54,6 +54,11 @@ function getFileETag(file: { id: string; metadata?: string | null }): string {
   return file.id;
 }
 
+function xmlError(c: any, code: string, message: string, status: number): Response {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Error>\n  <Code>${escapeXml(code)}</Code>\n  <Message>${escapeXml(message)}</Message>\n</Error>`;
+  return c.text(xml, status, { 'Content-Type': 'application/xml' });
+}
+
 s3Router.use('*', s3AuthMiddleware);
 
 // GET /s3/ (List Buckets - maps to workspaces)
@@ -279,7 +284,7 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
   const folderPath = pathParts.join('/');
 
   const folderId = await getWorkspaceFolder(db, workspace.id, folderPath);
-  if (folderId === undefined) return c.text('Object not found', 404);
+  if (folderId === undefined) return xmlError(c, 'NoSuchKey', `The specified key does not exist.`, 404);
 
   const file = await db.prepare(`
     SELECT * FROM files 
@@ -287,7 +292,7 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
       AND is_trashed = 0
   `).bind(workspace.id, fileName, folderId, folderId).first<any>();
 
-  if (!file) return c.text('Object not found', 404);
+  if (!file) return xmlError(c, 'NoSuchKey', `The specified key does not exist.`, 404);
 
   if (c.req.method === 'HEAD') {
     c.header('Content-Type', file.mime_type || 'application/octet-stream');
@@ -357,7 +362,7 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
   const folderPath = pathParts.join('/');
 
   const folderId = await getWorkspaceFolder(db, workspace.id, folderPath);
-  if (folderId === undefined) return c.text('Object not found', 404);
+  if (folderId === undefined) return xmlError(c, 'NoSuchKey', `The specified key does not exist.`, 404);
 
   const file = await db.prepare(`
     SELECT * FROM files 
@@ -365,7 +370,7 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
       AND is_trashed = 0
   `).bind(workspace.id, fileName, folderId, folderId).first<any>();
 
-  if (!file) return c.text('Object not found', 404);
+  if (!file) return xmlError(c, 'NoSuchKey', `The specified key does not exist.`, 404);
 
   const driveService = new GoogleDriveService(
     c.env.KV,
