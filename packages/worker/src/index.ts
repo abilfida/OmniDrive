@@ -16,6 +16,7 @@ import { sharedRouter } from './routes/shared';
 import { automationsRouter } from './routes/automations';
 import { workspacesRouter } from './routes/workspaces';
 import { adminRouter } from './routes/admin';
+import { s3CredentialsRouter } from './routes/s3-credentials';
 import { AutomationEngine } from './services/automation.service';
 
 export const app = new Hono<AppContext>({ strict: false });
@@ -64,6 +65,7 @@ app.route('/api/shared', sharedRouter);
 app.route('/api/automations', automationsRouter);
 app.route('/api/workspaces', workspacesRouter);
 app.route('/api/admin', adminRouter);
+app.route('/api/s3-credentials', s3CredentialsRouter);
 
 // Health check (public)
 app.get('/api/health', (c) => {
