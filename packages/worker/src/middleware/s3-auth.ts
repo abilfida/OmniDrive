@@ -100,7 +100,22 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
     // Perform standard AWS SigV4 validation
     // 1. Time expiration and clock skew validation
     const datePattern = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
-    const dateMatch = amzDate.match(datePattern);
+    let dateMatch = amzDate.match(datePattern);
+    if (!dateMatch && !isPresigned && !c.req.header('x-amz-date')) {
+      const parsedTime = Date.parse(amzDate);
+      if (!isNaN(parsedTime)) {
+        const parsedDateObj = new Date(parsedTime);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const yearStr = String(parsedDateObj.getUTCFullYear());
+        const monthStr = pad(parsedDateObj.getUTCMonth() + 1);
+        const dayStr = pad(parsedDateObj.getUTCDate());
+        const hourStr = pad(parsedDateObj.getUTCHours());
+        const minStr = pad(parsedDateObj.getUTCMinutes());
+        const secStr = pad(parsedDateObj.getUTCSeconds());
+        amzDate = `${yearStr}${monthStr}${dayStr}T${hourStr}${minStr}${secStr}Z`;
+        dateMatch = amzDate.match(datePattern);
+      }
+    }
     if (!dateMatch) {
       return returnXmlError(c, 'AccessDenied', 'Invalid date format (expected YYYYMMDDTHHMMSSZ)');
     }

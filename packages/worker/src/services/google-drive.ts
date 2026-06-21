@@ -15,6 +15,7 @@ export interface GDriveFile {
   webContentLink?: string;
   createdTime: string;
   modifiedTime: string;
+  md5Checksum?: string;
 }
 
 export interface GDriveFolder {
@@ -237,19 +238,9 @@ export class GoogleDriveService {
   async getFile(
     driveAccountId: string,
     googleFileId: string
-  ): Promise<{
-    id: string;
-    name: string;
-    mimeType: string;
-    size: string;
-    thumbnailLink?: string;
-    webViewLink?: string;
-    webContentLink?: string;
-    createdTime: string;
-    modifiedTime: string;
-  }> {
+  ): Promise<GDriveFile> {
     const token = await this.getValidToken(driveAccountId);
-    const fields = 'id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime';
+    const fields = 'id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum';
 
     const response = await fetch(`${DRIVE_API}/files/${googleFileId}?fields=${fields}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -379,7 +370,7 @@ export class GoogleDriveService {
 
   async copyFile(driveAccountId: string, fileId: string): Promise<GDriveFile> {
     const token = await this.getValidToken(driveAccountId);
-    const fields = 'id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime';
+    const fields = 'id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum';
 
     const response = await fetch(`${DRIVE_API}/files/${fileId}/copy?fields=${fields}`, {
       method: 'POST',
@@ -479,7 +470,7 @@ export class GoogleDriveService {
   }> {
     const token = await this.getValidToken(driveAccountId);
     const fields =
-      'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime))';
+      'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum))';
 
     const response = await fetch(
       `${DRIVE_API}/changes?pageToken=${encodeURIComponent(pageToken)}&fields=${fields}&spaces=drive&includeRemoved=true`,
@@ -510,7 +501,7 @@ export class GoogleDriveService {
     }>
   > {
     const token = await this.getValidToken(driveAccountId);
-    const fields = 'files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+    const fields = 'files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum)';
     const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
 
     const allFiles: Array<any> = [];
@@ -542,7 +533,7 @@ export class GoogleDriveService {
   ): Promise<{ files: GDriveFile[]; folders: GDriveFolder[] }> {
     const token = await this.getValidToken(driveAccountId);
     const fields =
-      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum)';
     const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
 
     const allFiles: GDriveFile[] = [];
@@ -583,7 +574,7 @@ export class GoogleDriveService {
   ): Promise<{ files: GDriveFile[]; folders: GDriveFolder[] }> {
     const token = await this.getValidToken(driveAccountId);
     const fields =
-      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum)';
     const q = encodeURIComponent(`trashed = false`);
 
     const allFiles: GDriveFile[] = [];
@@ -622,7 +613,7 @@ export class GoogleDriveService {
   ): AsyncGenerator<{ files: GDriveFile[]; folders: GDriveFolder[]; nextPageToken?: string }, void, unknown> {
     const token = await this.getValidToken(driveAccountId);
     const fields =
-      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime)';
+      'nextPageToken,files(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum)';
     const q = encodeURIComponent(`trashed = false`);
 
     let pageToken: string | undefined = startPageToken;

@@ -29,6 +29,19 @@ app.use('/api/*', csrfGuard);
 
 import { AppError } from './middleware/error-handler';
 
+function escapeXml(str: string): string {
+  return str.replace(/[<>&'"]/g, (c) => {
+    switch (c) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '\'': return '&apos;';
+      case '"': return '&quot;';
+      default: return c;
+    }
+  });
+}
+
 app.onError((err, c) => {
   const isAppError = err instanceof AppError || err.name === 'AppError';
   const status = isAppError ? (err as any).status : 500;
@@ -39,6 +52,27 @@ app.onError((err, c) => {
   } else {
     // Optional: Just log 4xx errors as info if needed, or suppress
     // console.info(`[${status}] ${message}`);
+  }
+  
+  if (c.req.path.startsWith('/s3')) {
+    let s3Code = 'InternalError';
+    if (status === 400) s3Code = 'InvalidRequest';
+    else if (status === 401 || status === 403) s3Code = 'AccessDenied';
+    else if (status === 404) s3Code = 'NoSuchKey';
+    else if (status === 405) s3Code = 'MethodNotAllowed';
+    else if (status === 409) s3Code = 'Conflict';
+
+    if (typeof (err as any).code === 'string' && (err as any).code) {
+      s3Code = (err as any).code;
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>${escapeXml(s3Code)}</Code>
+  <Message>${escapeXml(message)}</Message>
+</Error>`;
+    c.header('Content-Type', 'application/xml');
+    return c.text(xml, status as any);
   }
   
   return c.json({ error: message }, status as any);

@@ -124,7 +124,8 @@ s3Router.get('/:bucket', async (c) => {
     FROM files f
     LEFT JOIN folder_path fp ON f.workspace_folder_id = fp.id
     WHERE f.workspace_id = ? AND f.is_trashed = 0
-  `).bind(workspace.id, workspace.id, workspace.id).all<any>();
+      AND COALESCE(fp.path, '') || f.name LIKE ?
+  `).bind(workspace.id, workspace.id, workspace.id, prefix + '%').all<any>();
 
   let contentsXml = '';
   const commonPrefixesSet = new Set<string>();
@@ -323,6 +324,33 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
   `).bind(bucketName, userId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
+
+  const uploadId = c.req.query('uploadId');
+  if (uploadId) {
+    const upload = await db.prepare('SELECT * FROM s3_multipart_uploads WHERE upload_id = ? AND user_id = ? AND workspace_id = ?')
+      .bind(uploadId, userId, workspace.id).first<any>();
+    if (!upload) {
+      const errorCode = 'NoSuchUpload';
+      const errorMessage = 'The specified multipart upload does not exist.';
+      return c.text(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>${escapeXml(errorCode)}</Code><Message>${escapeXml(errorMessage)}</Message></Error>`, 404, { 'Content-Type': 'application/xml' });
+    }
+
+    const driveService = new GoogleDriveService(
+      c.env.KV,
+      c.env.GOOGLE_CLIENT_ID,
+      c.env.GOOGLE_CLIENT_SECRET,
+      c.env.TOKEN_ENCRYPTION_KEY
+    );
+
+    try {
+      await driveService.deleteFile(upload.drive_account_id, upload.temp_folder_id);
+    } catch (err) {
+      console.error('Failed to delete temp multipart upload folder from Google Drive:', err);
+    }
+
+    await db.prepare('DELETE FROM s3_multipart_uploads WHERE upload_id = ?').bind(uploadId).run();
+    return c.body(null, 204);
+  }
 
   const pathParts = key.split('/');
   const fileName = pathParts.pop();
@@ -568,8 +596,8 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <InitiateMultipartUploadResult>
-  <Bucket>${bucketName}</Bucket>
-  <Key>${key}</Key>
+  <Bucket>${escapeXml(bucketName)}</Bucket>
+  <Key>${escapeXml(key)}</Key>
   <UploadId>${uploadId}</UploadId>
 </InitiateMultipartUploadResult>`;
 
@@ -692,9 +720,9 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <CompleteMultipartUploadResult>
-  <Location>http://${c.req.header('Host')}/s3/${bucketName}/${key}</Location>
-  <Bucket>${bucketName}</Bucket>
-  <Key>${key}</Key>
+  <Location>${escapeXml(`http://${c.req.header('Host')}/s3/${bucketName}/${key}`)}</Location>
+  <Bucket>${escapeXml(bucketName)}</Bucket>
+  <Key>${escapeXml(key)}</Key>
   <ETag>"${s3Etag}"</ETag>
 </CompleteMultipartUploadResult>`;
 
