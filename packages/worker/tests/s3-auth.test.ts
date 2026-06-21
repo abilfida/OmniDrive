@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { s3AuthMiddleware } from '../src/middleware/s3-auth';
 import { encrypt } from '../src/lib/crypto';
@@ -102,6 +102,15 @@ function calculateSigV4({
 }
 
 describe('S3 Auth Middleware', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-21T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const getMockEnv = async (credentialsInDb = true) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
     
@@ -376,5 +385,121 @@ describe('S3 Auth Middleware', () => {
     const body = await res.text();
     expect(body).toContain('<Code>AccessDenied</Code>');
     expect(body).toContain('<Message>Request has expired</Message>');
+  });
+
+  it('rejects malformed date formats in presigned URLs', async () => {
+    const app = createTestApp();
+    const env = await getMockEnv();
+    
+    const malformedAmzDate = '2026-06-21T12:00:00Z'; // standard ISO instead of YYYYMMDDTHHMMSSZ
+    const dateStr = '20260621';
+    const path = '/test-bucket/file.txt';
+    const headers = {
+      'host': 'localhost:8787'
+    };
+    
+    const queryParams = {
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request`,
+      'X-Amz-Date': malformedAmzDate,
+      'X-Amz-Expires': '86400',
+      'X-Amz-SignedHeaders': 'host'
+    };
+
+    const { signature } = calculateSigV4({
+      method: 'GET',
+      path,
+      queryParams,
+      headers,
+      dateStr,
+      amzDate: malformedAmzDate
+    });
+
+    const queryString = Object.entries(queryParams)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&') + `&X-Amz-Signature=${signature}`;
+
+    const res = await app.request(`${path}?${queryString}`, {
+      method: 'GET',
+      headers
+    }, env);
+
+    expect(res.status).toBe(403);
+    const body = await res.text();
+    expect(body).toContain('<Code>AccessDenied</Code>');
+    expect(body).toContain('<Message>Invalid date format (expected YYYYMMDDTHHMMSSZ)</Message>');
+  });
+
+  it('rejects header-based requests with skewed clocks (> 15 mins)', async () => {
+    const app = createTestApp();
+    const env = await getMockEnv();
+    
+    // 16 minutes in the past relative to 12:00:00Z (which is 11:44:00Z)
+    const skewedAmzDate = '20260621T114400Z';
+    const dateStr = '20260621';
+    const path = '/test-bucket/file.txt';
+    const headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': skewedAmzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    const { signature, signedHeaders } = calculateSigV4({
+      method: 'GET',
+      path,
+      headers,
+      dateStr,
+      amzDate: skewedAmzDate
+    });
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await app.request(path, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, env);
+
+    expect(res.status).toBe(403);
+    const body = await res.text();
+    expect(body).toContain('<Code>RequestTimeTooSkewed</Code>');
+    expect(body).toContain('The difference between the request time and the current time is too large.');
+  });
+
+  it('rejects presigned URLs with invalid signatures', async () => {
+    const app = createTestApp();
+    const env = await getMockEnv();
+    
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    const path = '/test-bucket/file.txt';
+    const headers = {
+      'host': 'localhost:8787'
+    };
+    
+    const queryParams = {
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request`,
+      'X-Amz-Date': amzDate,
+      'X-Amz-Expires': '86400',
+      'X-Amz-SignedHeaders': 'host'
+    };
+
+    const incorrectSignature = 'b'.repeat(64);
+
+    const queryString = Object.entries(queryParams)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&') + `&X-Amz-Signature=${incorrectSignature}`;
+
+    const res = await app.request(`${path}?${queryString}`, {
+      method: 'GET',
+      headers
+    }, env);
+
+    expect(res.status).toBe(403);
+    const body = await res.text();
+    expect(body).toContain('<Code>SignatureDoesNotMatch</Code>');
   });
 });

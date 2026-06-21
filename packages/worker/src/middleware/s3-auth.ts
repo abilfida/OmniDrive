@@ -98,26 +98,37 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
     const rawSecretKey = await decrypt(cred.secret_key_enc, c.env.TOKEN_ENCRYPTION_KEY);
     
     // Perform standard AWS SigV4 validation
-    // 1. Time expiration check for presigned URLs
-    if (isPresigned && expiresStr) {
-      const expiresSec = parseInt(expiresStr, 10);
-      if (isNaN(expiresSec)) {
-        return returnXmlError(c, 'InvalidArgument', 'X-Amz-Expires must be a valid integer');
-      }
-      
-      // Parse amzDate (e.g. YYYYMMDDTHHMMSSZ)
-      const year = parseInt(amzDate.slice(0, 4), 10);
-      const month = parseInt(amzDate.slice(4, 6), 10) - 1;
-      const day = parseInt(amzDate.slice(6, 8), 10);
-      const hour = parseInt(amzDate.slice(9, 11), 10);
-      const min = parseInt(amzDate.slice(11, 13), 10);
-      const sec = parseInt(amzDate.slice(13, 15), 10);
-      
-      const requestTime = Date.UTC(year, month, day, hour, min, sec);
+    // 1. Time expiration and clock skew validation
+    const datePattern = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
+    const dateMatch = amzDate.match(datePattern);
+    if (!dateMatch) {
+      return returnXmlError(c, 'AccessDenied', 'Invalid date format (expected YYYYMMDDTHHMMSSZ)');
+    }
+    const year = parseInt(dateMatch[1], 10);
+    const month = parseInt(dateMatch[2], 10) - 1;
+    const day = parseInt(dateMatch[3], 10);
+    const hour = parseInt(dateMatch[4], 10);
+    const min = parseInt(dateMatch[5], 10);
+    const sec = parseInt(dateMatch[6], 10);
+    const requestTime = Date.UTC(year, month, day, hour, min, sec);
+    if (isNaN(requestTime)) {
+      return returnXmlError(c, 'AccessDenied', 'Invalid request date/time');
+    }
+
+    if (isPresigned) {
       const currentTime = Date.now();
-      
+      const expiresSec = parseInt(expiresStr, 10);
+      if (isNaN(expiresSec) || expiresSec < 0 || expiresSec > 604800) {
+        return returnXmlError(c, 'InvalidArgument', 'X-Amz-Expires must be a valid integer between 0 and 604800');
+      }
       if (currentTime > requestTime + expiresSec * 1000) {
         return returnXmlError(c, 'AccessDenied', 'Request has expired', 403);
+      }
+    } else {
+      const currentTime = Date.now();
+      const fifteenMinutes = 15 * 60 * 1000;
+      if (Math.abs(currentTime - requestTime) > fifteenMinutes) {
+        return returnXmlError(c, 'RequestTimeTooSkewed', 'The difference between the request time and the current time is too large.', 403);
       }
     }
     
