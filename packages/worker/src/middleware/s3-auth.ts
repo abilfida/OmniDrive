@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { timingSafeEqual } from 'node:crypto';
 import { decrypt } from '../lib/crypto';
 import { hmacSha256, sha256 } from '../lib/crypto-s3';
 
@@ -137,9 +138,15 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
     });
     
     queryParams.sort((a, b) => {
-      const keyCompare = awsEncode(a[0]).localeCompare(awsEncode(b[0]));
-      if (keyCompare !== 0) return keyCompare;
-      return awsEncode(a[1]).localeCompare(awsEncode(b[1]));
+      const aKey = awsEncode(a[0]);
+      const bKey = awsEncode(b[0]);
+      if (aKey < bKey) return -1;
+      if (aKey > bKey) return 1;
+      const aVal = awsEncode(a[1]);
+      const bVal = awsEncode(b[1]);
+      if (aVal < bVal) return -1;
+      if (aVal > bVal) return 1;
+      return 0;
     });
     
     const canonicalQueryString = queryParams
@@ -186,7 +193,9 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
     const kSigning = hmacSha256(kService, 'aws4_request');
     const calculatedSignature = hmacSha256(kSigning, stringToSign).toString('hex');
     
-    if (calculatedSignature !== signature) {
+    const computedBuf = Buffer.from(calculatedSignature, 'hex');
+    const providedBuf = Buffer.from(signature, 'hex');
+    if (computedBuf.length !== providedBuf.length || !timingSafeEqual(computedBuf, providedBuf)) {
       return returnXmlError(c, 'SignatureDoesNotMatch', 'The request signature we calculated does not match the signature you provided. Check your key and signing method.');
     }
     

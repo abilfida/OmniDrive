@@ -42,16 +42,28 @@ function calculateSigV4({
 
   const queryParamsList: [string, string][] = Object.entries(queryParams);
   queryParamsList.sort((a, b) => {
-    const keyCompare = awsEncode(a[0]).localeCompare(awsEncode(b[0]));
-    if (keyCompare !== 0) return keyCompare;
-    return awsEncode(a[1]).localeCompare(awsEncode(b[1]));
+    const aKey = awsEncode(a[0]);
+    const bKey = awsEncode(b[0]);
+    if (aKey < bKey) return -1;
+    if (aKey > bKey) return 1;
+    const aVal = awsEncode(a[1]);
+    const bVal = awsEncode(b[1]);
+    if (aVal < bVal) return -1;
+    if (aVal > bVal) return 1;
+    return 0;
   });
   const canonicalQueryString = queryParamsList
     .map(([key, val]) => `${awsEncode(key)}=${awsEncode(val)}`)
     .join('&');
 
   const canonicalHeadersList = Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]);
-  canonicalHeadersList.sort((a, b) => a[0].localeCompare(b[0]));
+  canonicalHeadersList.sort((a, b) => {
+    const aKey = a[0];
+    const bKey = b[0];
+    if (aKey < bKey) return -1;
+    if (aKey > bKey) return 1;
+    return 0;
+  });
   const canonicalHeaders = canonicalHeadersList
     .map(([k, v]) => `${k}:${v.trim().replace(/\s+/g, ' ')}\n`)
     .join('');
