@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0] - 2026-06-21
+
+### Added
+
+- **S3 Object Storage Compatibility Layer:**
+  - Full S3-compatible API exposed at `/s3/*` using path-style access (`/s3/<bucket>/<key>`)
+  - Each Omnidrive workspace maps as one S3 bucket
+  - New credentials API (`POST/GET/DELETE /api/s3-credentials`) to generate per-user Access Key ID & Secret Access Key
+  - AWS Signature Version 4 (SigV4) authentication middleware with clock skew validation (±15 min), presigned URL support, and timing-safe signature comparison
+- **S3 Endpoints implemented:**
+  - `GET /s3/` — ListBuckets
+  - `GET /s3/:bucket` — ListObjectsV2 with prefix and delimiter support (folder simulation)
+  - `HEAD /s3/:bucket/:key` — HeadObject
+  - `GET /s3/:bucket/:key` — GetObject (streamed)
+  - `PUT /s3/:bucket/:key` — PutObject (single-part, direct stream to Google Drive)
+  - `DELETE /s3/:bucket/:key` — DeleteObject
+  - `POST /s3/:bucket/:key?uploads` — Initiate Multipart Upload
+  - `PUT /s3/:bucket/:key?uploadId=&partNumber=` — Upload Part (buffered in Google Drive temp folder)
+  - `POST /s3/:bucket/:key?uploadId=` — Complete Multipart Upload (stream-concatenates parts)
+  - `DELETE /s3/:bucket/:key?uploadId=` — Abort Multipart Upload
+- **Google Drive Buffering**: Multipart upload parts are stored as temporary files in a Google Drive folder, then stream-concatenated on completion — no memory limit for large file uploads
+- **S3-compliant ETag**: Single-part uploads use MD5 hex; multipart uses `md5(concat(part_md5s))-N` format
+- **XML Error Responses**: All S3 errors returned as proper XML (`<Code>`, `<Message>`) with correct HTTP status codes
+- **New DB Tables**: `s3_credentials`, `s3_multipart_uploads`, `s3_multipart_parts`
+- **Compatible clients**: rclone, aws-cli, boto3, AWS SDK (with `endpoint_url` and `force_path_style=true`)
+- **Tests**: 33 new tests covering SigV4 auth, all CRUD operations, multipart sequence, error paths, XML escaping, and presigned URLs
+
+### Fixed
+
+- Fixed `GetObject` and `DeleteObject` returning plain-text `"Object not found"` instead of S3-compliant `<Code>NoSuchKey</Code>` XML error — caused S3 clients to crash instead of gracefully handling missing keys
+- Fixed `copyFile` in Google Drive service to include `md5Checksum` in API fields for accurate ETag tracking
+
 ## [0.8.15] - 2026-06-14
 
 ### Added

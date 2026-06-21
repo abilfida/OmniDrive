@@ -25,6 +25,7 @@ Omnidrive memungkinkan kamu menghubungkan beberapa akun Google Drive dan mengelo
 - **⚡ Aturan Automasi** — Pindahkan atau hapus file otomatis berdasarkan pola nama atau ekstensi
 - **🔄 Sinkronisasi Latar Belakang Tangguh** — Sinkronisasi otomatis via Google Drive Changes API (cron setiap 30 menit). Dilengkapi pemrosesan chunk yang aman dari OOM (OOM-safe) menggunakan generator, sinkronisasi yang dapat dilanjutkan (resume-able) setelah restart via `next_page_token`, upsert atomik untuk performa tinggi, dan penanganan graceful shutdown (SIGTERM) untuk mencegah sinkronisasi berjalan bersamaan.
 - **🌙 Mode Gelap** — UI tema gelap modern dengan sidebar workspace hierarkis ala Notion
+- **☁️ S3 Object Storage API** — API kompatibel S3 yang memungkinkan klien seperti rclone, aws-cli, dan boto3 terhubung langsung ke workspace Omnidrive sebagai bucket S3
 
 ## Keamanan
 
@@ -34,6 +35,31 @@ Omnidrive mengimplementasikan model keamanan yang tangguh untuk melindungi file 
 - **Rate Limiting**: Rate limiter bawaan dengan sliding window melindungi autentikasi dan endpoint publik dari serangan brute-force.
 - **OAuth PKCE**: Alur autentikasi menggunakan Proof Key for Code Exchange (S256) untuk keamanan tambahan.
 - **Kontrol Akses Ketat**: Pencegahan eskalasi peran RBAC dan pencegahan IDOR (Insecure Direct Object Reference) pada semua akses sumber daya.
+
+
+## S3 Object Storage API
+
+Omnidrive menyediakan API kompatibel S3 Object Storage. Klien S3 apa pun (rclone, aws-cli, boto3, AWS SDK) dapat terhubung menggunakan path-style access.
+
+**Cara kerja:**
+- Setiap **Workspace** dipetakan sebagai satu **Bucket**
+- File di dalam workspace menjadi **Object**, dengan path folder sebagai prefix key
+- Buat kredensial per-user dari **Pengaturan → Kredensial S3**
+
+**Endpoint:** `https://<url-worker-kamu>/s3`
+
+**Contoh konfigurasi rclone:**
+```ini
+[omnidrive]
+type = s3
+provider = Other
+access_key_id = OMNI...
+secret_access_key = ...
+endpoint = https://<url-worker-kamu>/s3
+force_path_style = true
+```
+
+**Operasi yang didukung:** ListBuckets, ListObjectsV2, GetObject, PutObject (single-part), HeadObject, DeleteObject, dan Multipart Upload lengkap (Initiate, UploadPart, CompleteMultipartUpload, AbortMultipartUpload).
 
 
 ## Tech Stack

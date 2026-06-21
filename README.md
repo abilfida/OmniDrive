@@ -25,6 +25,7 @@ Omnidrive lets you connect multiple Google Drive accounts and manage all your fi
 - **⚡ Automation Rules** — Auto-move or auto-delete files based on name or extension patterns
 - **🔄 Resilient Background Sync** — Automatic sync via Google Drive Changes API (cron every 30 minutes). Features OOM-safe chunk processing using generators, resume-able syncs across restarts via `next_page_token`, atomic upserts for performance, and graceful shutdown (SIGTERM) to prevent concurrent syncs.
 - **🌙 Dark Mode** — Modern dark theme UI with Notion-style hierarchical workspace sidebar
+- **☁️ S3 Object Storage API** — S3-compatible API (path-style access) exposing each workspace as a bucket; supports rclone, aws-cli, boto3, and AWS SDK with full Multipart Upload support
 
 ## Security
 
@@ -35,6 +36,30 @@ Omnidrive implements a robust security model to protect your files and data:
 - **OAuth PKCE**: Authentication flow uses Proof Key for Code Exchange (S256) for enhanced security.
 - **Strict Access Control**: Enforced RBAC role escalation prevention and IDOR (Insecure Direct Object Reference) prevention on all resource access.
 
+
+## S3 Object Storage API
+
+Omnidrive exposes an S3-compatible Object Storage API. Any S3 client (rclone, aws-cli, boto3, AWS SDK) can connect to it using path-style access.
+
+**How it works:**
+- Each **Workspace** is a **Bucket**
+- Files inside a workspace become **Objects**, with folder paths as key prefixes
+- Generate per-user credentials from **Settings → S3 Credentials**
+
+**Endpoint:** `https://<your-worker-url>/s3`
+
+**rclone configuration example:**
+```ini
+[omnidrive]
+type = s3
+provider = Other
+access_key_id = OMNI...
+secret_access_key = ...
+endpoint = https://<your-worker-url>/s3
+force_path_style = true
+```
+
+**Supported operations:** ListBuckets, ListObjectsV2, GetObject, PutObject (single-part), HeadObject, DeleteObject, and full Multipart Upload (Initiate, UploadPart, CompleteMultipartUpload, AbortMultipartUpload).
 
 ## Tech Stack
 
