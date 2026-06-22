@@ -22,6 +22,7 @@ if [ -d ".git" ]; then
     # Fetch updates from origin quietly, ignoring failures if offline
     if git fetch origin --quiet 2>/dev/null; then
         CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
+        CURRENT_BRANCH=${CURRENT_BRANCH:-main}
         
         # Check count of commits behind remote
         BEHIND_COUNT=$(git rev-list --count HEAD..origin/"$CURRENT_BRANCH" 2>/dev/null || echo 0)
@@ -34,13 +35,59 @@ if [ -d ".git" ]; then
             echo "--------------------------------------------------------"
             
             WANT_UPDATE="n"
-            read -p "Do you want to update to the latest version? (y/N): " WANT_UPDATE || WANT_UPDATE="n"
+            if [ -t 1 ]; then
+                read -p "Do you want to update to the latest version? (y/N): " WANT_UPDATE < /dev/tty || WANT_UPDATE="n"
+            else
+                read -p "Do you want to update to the latest version? (y/N): " WANT_UPDATE || WANT_UPDATE="n"
+            fi
+            
             if [[ "$WANT_UPDATE" =~ ^[Yy]$ ]]; then
-                echo "Updating repository (git pull)..."
-                if git pull origin "$CURRENT_BRANCH"; then
-                    echo "Update successful!"
-                else
-                    echo "Error: Failed to pull latest changes. Continuing with current version..."
+                STASHED=false
+                # Check for uncommitted changes in tracked files
+                if ! git diff --quiet 2>/dev/null; then
+                    echo "Warning: You have uncommitted changes in your repository."
+                    echo "Select how you want to handle your local changes:"
+                    echo "1) Save changes temporarily (git stash)"
+                    echo "2) Discard local changes (git reset --hard)"
+                    echo "3) Cancel update"
+                    
+                    CHANGE_CHOICE="3"
+                    if [ -t 1 ]; then
+                        read -p "Enter choice [1-3]: " CHANGE_CHOICE < /dev/tty || CHANGE_CHOICE="3"
+                    else
+                        read -p "Enter choice [1-3]: " CHANGE_CHOICE || CHANGE_CHOICE="3"
+                    fi
+                    
+                    case "$CHANGE_CHOICE" in
+                        1)
+                            echo "Stashing local changes..."
+                            git stash
+                            STASHED=true
+                            ;;
+                        2)
+                            echo "Discarding local changes..."
+                            git reset --hard HEAD
+                            STASHED=false
+                            ;;
+                        *)
+                            echo "Update cancelled. Continuing with current version..."
+                            WANT_UPDATE="n"
+                            STASHED=false
+                            ;;
+                    esac
+                fi
+                
+                if [[ "$WANT_UPDATE" =~ ^[Yy]$ ]]; then
+                    echo "Updating repository (git pull)..."
+                    if git pull origin "$CURRENT_BRANCH"; then
+                        echo "Update successful!"
+                        if [ "$STASHED" = true ]; then
+                            echo "Restoring stashed local changes..."
+                            git stash pop || echo "Notice: Stash popped with conflicts. Please resolve manually."
+                        fi
+                    else
+                        echo "Error: Failed to pull latest changes. Continuing with current version..."
+                    fi
                 fi
             else
                 echo "Continuing with current version..."
