@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Resolve absolute path of the script before any cd operations
+SCRIPT_PATH=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+
 echo "Starting Omnidrive Setup..."
 
 # Check if we are in the omnidrive directory
@@ -19,9 +22,16 @@ fi
 # Check for updates if we are in a git repository
 if [ -d ".git" ]; then
     echo "Checking for updates..."
+    
+    # Export Git dummy identity variables to prevent crashes in headless environments
+    export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-Omnidrive Deployer}"
+    export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-deploy@omnidrive.local}"
+    export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Omnidrive Deployer}"
+    export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-deploy@omnidrive.local}"
+
     # Fetch updates from origin quietly, ignoring failures if offline
     if git fetch origin --quiet 2>/dev/null; then
-        CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
+        CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD 2>/dev/null || git branch --show-current 2>/dev/null || echo "main")
         CURRENT_BRANCH=${CURRENT_BRANCH:-main}
         
         # Check count of commits behind remote
@@ -79,16 +89,32 @@ if [ -d ".git" ]; then
                 
                 if [[ "$WANT_UPDATE" =~ ^[Yy]$ ]]; then
                     echo "Updating repository (git pull)..."
-                    if git pull origin "$CURRENT_BRANCH"; then
-                        echo "Update successful!"
-                    else
+                    
+                    PULL_FAILED=false
+                    git pull origin "$CURRENT_BRANCH" || PULL_FAILED=true
+                    
+                    # Check for merge conflicts
+                    if git ls-files -u | grep -q .; then
+                        echo "Error: Update resulted in merge conflicts. Please resolve conflicts manually." >&2
+                        exit 1
+                    fi
+                    
+                    if [ "$PULL_FAILED" = true ]; then
                         echo "Error: Failed to pull latest changes. Continuing with current version..."
+                    else
+                        echo "Update successful!"
                     fi
                     
                     # Pop stash if we stashed, regardless of pull success
                     if [ "$STASHED" = true ]; then
                         echo "Restoring stashed local changes..."
                         git stash pop || echo "Notice: Stash popped with conflicts. Please resolve manually."
+                    fi
+                    
+                    # Restart script with updated code to avoid bash shell parser offset shift issues
+                    if [ "$PULL_FAILED" = false ]; then
+                        echo "Restarting script with updated code..."
+                        exec bash "$SCRIPT_PATH" "$@"
                     fi
                 fi
             else
