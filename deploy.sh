@@ -43,8 +43,8 @@ if [ -d ".git" ]; then
             
             if [[ "$WANT_UPDATE" =~ ^[Yy]$ ]]; then
                 STASHED=false
-                # Check for uncommitted changes in tracked files
-                if ! git diff --quiet 2>/dev/null; then
+                # Check for uncommitted changes in tracked files (both staged and unstaged)
+                if ! git diff HEAD --quiet 2>/dev/null; then
                     echo "Warning: You have uncommitted changes in your repository."
                     echo "Select how you want to handle your local changes:"
                     echo "1) Save changes temporarily (git stash)"
@@ -61,12 +61,12 @@ if [ -d ".git" ]; then
                     case "$CHANGE_CHOICE" in
                         1)
                             echo "Stashing local changes..."
-                            git stash
+                            git stash || { echo "Error: Failed to stash changes." >&2; exit 1; }
                             STASHED=true
                             ;;
                         2)
                             echo "Discarding local changes..."
-                            git reset --hard HEAD
+                            git reset --hard HEAD || { echo "Error: Failed to reset changes." >&2; exit 1; }
                             STASHED=false
                             ;;
                         *)
@@ -81,12 +81,14 @@ if [ -d ".git" ]; then
                     echo "Updating repository (git pull)..."
                     if git pull origin "$CURRENT_BRANCH"; then
                         echo "Update successful!"
-                        if [ "$STASHED" = true ]; then
-                            echo "Restoring stashed local changes..."
-                            git stash pop || echo "Notice: Stash popped with conflicts. Please resolve manually."
-                        fi
                     else
                         echo "Error: Failed to pull latest changes. Continuing with current version..."
+                    fi
+                    
+                    # Pop stash if we stashed, regardless of pull success
+                    if [ "$STASHED" = true ]; then
+                        echo "Restoring stashed local changes..."
+                        git stash pop || echo "Notice: Stash popped with conflicts. Please resolve manually."
                     fi
                 fi
             else
