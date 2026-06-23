@@ -189,6 +189,16 @@ export const api = {
     if (metadata && Object.keys(metadata).length > 0) params.set('metadata', JSON.stringify(metadata));
     return request<{ files: import('../types').FileEntry[], query: string }>(`/api/files/search?${params.toString()}`);
   },
+
+  // Workspaces & S3 Credentials
+  getWorkspaces: () => request<{ workspaces: { id: string; name: string; role: string }[] }>('/api/workspaces'),
+  getS3Credentials: () => request<any[]>('/api/s3-credentials'),
+  createS3Credential: (description: string, workspaceId?: string) =>
+    request<{ id: string; accessKeyId: string; secretAccessKey: string; description: string; createdAt: string }>('/api/s3-credentials', {
+      method: 'POST',
+      body: JSON.stringify({ description, workspaceId }),
+    }),
+  deleteS3Credential: (id: string) => request<{ success: boolean }>(`/api/s3-credentials/${id}`, { method: 'DELETE' }),
 };
 
 export { ApiError };
