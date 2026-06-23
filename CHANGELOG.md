@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.3] - 2026-06-24
+
+### Fixed
+
+- Added missing D1 database migration (`0005_add_workspace_id_to_s3_credentials.sql`) to add `workspace_id` to the existing `s3_credentials` table in the production environment.
+
 ## [0.9.2] - 2026-06-24
 
 ### Added
