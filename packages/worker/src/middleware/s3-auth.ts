@@ -226,6 +226,7 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
     }
     
     c.set('userId', cred.user_id);
+    c.set('s3WorkspaceId', cred.workspace_id || null);
     await next();
   } catch (err: any) {
     return returnXmlError(c, 'SignatureDoesNotMatch', 'Signature verification failed: ' + err.message);

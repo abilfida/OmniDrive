@@ -111,7 +111,7 @@ describe('S3 Auth Middleware', () => {
     vi.useRealTimers();
   });
 
-  const getMockEnv = async (credentialsInDb = true) => {
+  const getMockEnv = async (credentialsInDb = true, workspaceId: string | null = null) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
     
     const mockDb = {
@@ -125,6 +125,7 @@ describe('S3 Auth Middleware', () => {
                     return {
                       id: 'cred-123',
                       user_id: USER_ID,
+                      workspace_id: workspaceId,
                       access_key_id: ACCESS_KEY_ID,
                       secret_key_enc: encryptedSecret,
                       description: 'Test Credential'
@@ -155,7 +156,11 @@ describe('S3 Auth Middleware', () => {
     const testApp = new Hono<AppContext>();
     testApp.use('*', s3AuthMiddleware);
     testApp.all('*', (c) => {
-      return c.json({ success: true, userId: c.get('userId') });
+      return c.json({
+        success: true,
+        userId: c.get('userId'),
+        s3WorkspaceId: c.get('s3WorkspaceId')
+      });
     });
     return testApp;
   };
@@ -501,5 +506,81 @@ describe('S3 Auth Middleware', () => {
     expect(res.status).toBe(403);
     const body = await res.text();
     expect(body).toContain('<Code>SignatureDoesNotMatch</Code>');
+  });
+
+  it('propagates workspace_id as s3WorkspaceId in context if present', async () => {
+    const app = createTestApp();
+    const env = await getMockEnv(true, 'workspace-123');
+    
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    const path = '/test-bucket/file.txt';
+    const headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    const { signature, signedHeaders } = calculateSigV4({
+      method: 'GET',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await app.request(path, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, env);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.success).toBe(true);
+    expect(body.userId).toBe(USER_ID);
+    expect(body.s3WorkspaceId).toBe('workspace-123');
+  });
+
+  it('sets s3WorkspaceId to null in context if workspace_id is absent/null', async () => {
+    const app = createTestApp();
+    const env = await getMockEnv(true, null);
+    
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    const path = '/test-bucket/file.txt';
+    const headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    const { signature, signedHeaders } = calculateSigV4({
+      method: 'GET',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await app.request(path, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, env);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.success).toBe(true);
+    expect(body.userId).toBe(USER_ID);
+    expect(body.s3WorkspaceId).toBe(null);
   });
 });
