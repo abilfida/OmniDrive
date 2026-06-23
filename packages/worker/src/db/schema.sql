@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS s3_credentials (
     access_key_id     TEXT UNIQUE NOT NULL,
     secret_key_enc    TEXT NOT NULL,
     description       TEXT,
+    workspace_id      TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
     created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
