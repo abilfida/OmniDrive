@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.2] - 2026-06-24
+
+### Added
+
+- **Workspace-Scoped S3 API Keys:**
+  - S3 credentials can now be scoped to a specific workspace, restricting bucket and object access to that workspace only.
+  - New `workspace_id` column on `s3_credentials` table — `NULL` for global keys, populated for workspace-scoped keys.
+  - Backend role-based authorization: only workspace `manager` or `owner` roles can create scoped keys.
+  - S3 auth middleware propagates `s3WorkspaceId` context for downstream enforcement.
+  - All 7 S3 object routes (ListBuckets, ListObjects, HeadObject, GetObject, PutObject, DeleteObject, Multipart) enforce workspace isolation when a scoped key is used.
+  - Frontend S3 API Key management UI in Settings page with workspace selector, creation modal, one-time secret key copy, and delete confirmation.
+  - API client methods: `getWorkspaces()`, `getS3Credentials()`, `createS3Credential()`, `deleteS3Credential()`.
+
+- **Deploy Script Self-Update:**
+  - `deploy.sh` now checks for upstream updates on startup using `git fetch` + `git rev-list`.
+  - Interactive prompt to pull latest changes with uncommitted work protection via `git stash`.
+  - Automatic stash recovery after pull, with conflict detection and rollback support.
+  - Script auto-restarts after a successful update to run the latest version.
+
+### Fixed
+
+- Fixed CORS issues in production by setting `FRONTEND_URL` variable for the CORS middleware in `wrangler.toml`.
+- Tracked `.env.production` so the web frontend builds with the correct `VITE_API_URL` on deploy.
+- Fixed Safari/WebKit date parsing issue with SQLite `datetime('now')` format by normalizing to ISO 8601.
+
 ## [0.9.1] - 2026-06-21
 
 ### Fixed
