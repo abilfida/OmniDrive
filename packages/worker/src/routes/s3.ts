@@ -64,6 +64,7 @@ s3Router.use('*', s3AuthMiddleware);
 // GET /s3/ (List Buckets - maps to workspaces)
 s3Router.get('/', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const db = c.env.DB;
 
   const { results: workspaces } = await db.prepare(`
@@ -71,7 +72,8 @@ s3Router.get('/', async (c) => {
     FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE wm.user_id = ?
-  `).bind(userId).all<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(userId, s3WorkspaceId, s3WorkspaceId).all<any>();
 
   let bucketsXml = '';
   for (const ws of workspaces) {
@@ -97,6 +99,7 @@ ${bucketsXml}  </Buckets>
 // GET /s3/:bucket (List Objects V2)
 s3Router.get('/:bucket', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const prefix = c.req.query('prefix') || '';
   const delimiter = c.req.query('delimiter') || '';
@@ -107,7 +110,8 @@ s3Router.get('/:bucket', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) {
     const errorCode = 'NoSuchBucket';
@@ -230,6 +234,7 @@ async function getOrCreateWorkspaceFolder(db: any, workspaceId: string, folderPa
 // HEAD /s3/:bucket/:key (HeadObject - Get Metadata)
 s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const key = c.req.param('key');
   const db = c.env.DB;
@@ -238,7 +243,8 @@ s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Not Found', 404);
 
@@ -266,6 +272,7 @@ s3Router.on('HEAD', '/:bucket/:key{.+}', async (c) => {
 // GET /s3/:bucket/:key (GetObject - Download)
 s3Router.get('/:bucket/:key{.+}', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const key = c.req.param('key');
   const db = c.env.DB;
@@ -274,7 +281,8 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
 
@@ -318,6 +326,7 @@ s3Router.get('/:bucket/:key{.+}', async (c) => {
 // DELETE /s3/:bucket/:key (DeleteObject)
 s3Router.delete('/:bucket/:key{.+}', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const key = c.req.param('key');
   const db = c.env.DB;
@@ -326,7 +335,8 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
 
@@ -397,6 +407,7 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   }
 
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const key = c.req.param('key');
   const db = c.env.DB;
@@ -405,7 +416,8 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
 
@@ -504,10 +516,14 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
 // Helper to upload a part
 async function handleUploadPart(c: any, uploadId: string, partNumber: number): Promise<Response> {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const db = c.env.DB;
 
-  const upload = await db.prepare('SELECT * FROM s3_multipart_uploads WHERE upload_id = ? AND user_id = ?')
-    .bind(uploadId, userId).first<any>();
+  const upload = await db.prepare(`
+    SELECT * FROM s3_multipart_uploads 
+    WHERE upload_id = ? AND user_id = ?
+      AND (? IS NULL OR workspace_id = ?)
+  `).bind(uploadId, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
   if (!upload) return c.text('Invalid uploadId', 404);
 
   const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
@@ -560,6 +576,7 @@ async function handleUploadPart(c: any, uploadId: string, partNumber: number): P
 // POST /s3/:bucket/:key (Initiate / Complete Multipart Upload)
 s3Router.post('/:bucket/:key{.+}', async (c) => {
   const userId = c.get('userId');
+  const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
   const key = c.req.param('key');
   const uploadsParam = c.req.query('uploads');
@@ -570,7 +587,8 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
     SELECT w.id FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
-  `).bind(bucketName, userId).first<any>();
+      AND (? IS NULL OR w.id = ?)
+  `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
 
@@ -612,8 +630,11 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
 
   // 2. Complete Multipart Upload
   if (uploadId) {
-    const upload = await db.prepare('SELECT * FROM s3_multipart_uploads WHERE upload_id = ? AND user_id = ?')
-      .bind(uploadId, userId).first<any>();
+    const upload = await db.prepare(`
+      SELECT * FROM s3_multipart_uploads 
+      WHERE upload_id = ? AND user_id = ?
+        AND (? IS NULL OR workspace_id = ?)
+    `).bind(uploadId, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
     if (!upload) return c.text('Upload session not found', 404);
 
     // Get all parts ordered by part_number

@@ -121,6 +121,7 @@ describe('S3 API compatibility endpoints', () => {
     multipartUploadResolved = null as any,
     multipartPartsResolved = [] as any[],
     driveAccountResolved = null as any,
+    s3WorkspaceId = null as string | null,
     sqlQueries = [] as { sql: string; args: any[] }[]
   } = {}) => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
@@ -142,7 +143,8 @@ describe('S3 API compatibility endpoints', () => {
                       user_id: userId,
                       access_key_id: ACCESS_KEY_ID,
                       secret_key_enc: encryptedSecret,
-                      description: 'Test Credential'
+                      description: 'Test Credential',
+                      workspace_id: s3WorkspaceId
                     };
                   }
                 }
@@ -1359,6 +1361,145 @@ describe('S3 API compatibility endpoints', () => {
       }, env);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('S3 workspace scoping enforcement when s3WorkspaceId is set', () => {
+    async function makeSignedRequest(
+      method: string, 
+      path: string, 
+      env: any, 
+      payload = '', 
+      queryParams: Record<string, string> = {}
+    ) {
+      const amzDate = '20260621T120000Z';
+      const dateStr = '20260621';
+      const headers = {
+        'host': 'localhost:8787',
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': sha256(payload)
+      };
+      if (payload) {
+        headers['content-length'] = String(payload.length);
+      }
+      const { signature, signedHeaders } = calculateSigV4({ method, path, queryParams, headers, payload, dateStr, amzDate });
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+      
+      const queryStr = Object.entries(queryParams)
+        .map(([k, v]) => `${encodeURIComponent(k)}${v ? `=${encodeURIComponent(v)}` : ''}`)
+        .join('&');
+      const fullPath = queryStr ? `${path}?${queryStr}` : path;
+
+      return app.request(fullPath, {
+        method,
+        headers: { ...headers, Authorization: authHeader },
+        body: payload || undefined
+      }, env);
+    }
+
+    it('returns only the scoped workspace in ListBuckets if s3WorkspaceId is set', async () => {
+      const workspaces = [
+        { id: 'ws-1', name: 'my-bucket-1', created_at: '2026-06-21 10:00:00' },
+        { id: 'ws-2', name: 'my-bucket-2', created_at: '2026-06-21 11:00:00' }
+      ];
+
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({ 
+        workspaces: [workspaces[0]], 
+        s3WorkspaceId: 'ws-1',
+        sqlQueries
+      });
+
+      const res = await makeSignedRequest('GET', '/s3/', env);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain('<Name>my-bucket-1</Name>');
+      expect(body).not.toContain('<Name>my-bucket-2</Name>');
+
+      const listQuery = sqlQueries.find(q => q.sql.includes('SELECT w.id, w.name, w.created_at'));
+      expect(listQuery).toBeDefined();
+      expect(listQuery.args[1]).toBe('ws-1');
+      expect(listQuery.args[2]).toBe('ws-1');
+    });
+
+    it('allows access to bucket (ListObjectsV2) if it belongs to the scoped workspace', async () => {
+      const sqlQueries: any[] = [];
+      const env = await getMockEnv({ 
+        workspaceResolved: { id: 'ws-1' }, 
+        s3WorkspaceId: 'ws-1',
+        sqlQueries
+      });
+      const res = await makeSignedRequest('GET', '/s3/my-bucket-1', env);
+      expect(res.status).toBe(200);
+
+      const resolveQuery = sqlQueries.find(q => q.sql.includes('SELECT w.id FROM workspaces w'));
+      expect(resolveQuery).toBeDefined();
+      expect(resolveQuery.args[2]).toBe('ws-1');
+      expect(resolveQuery.args[3]).toBe('ws-1');
+    });
+
+    it('rejects GET bucket (ListObjectsV2) if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('GET', '/s3/my-bucket-1', env);
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toContain('<Code>NoSuchBucket</Code>');
+    });
+
+    it('rejects HEAD object if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('HEAD', '/s3/my-bucket-1/file.txt', env);
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects GET object if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('GET', '/s3/my-bucket-1/file.txt', env);
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toBe('Bucket not found');
+    });
+
+    it('rejects DELETE object if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('DELETE', '/s3/my-bucket-1/file.txt', env);
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toBe('Bucket not found');
+    });
+
+    it('rejects PUT object if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('PUT', '/s3/my-bucket-1/file.txt', env, 'some content');
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toBe('Bucket not found');
+    });
+
+    it('rejects POST object (initiate multipart upload) if workspace does not match scoped workspace ID', async () => {
+      const env = await getMockEnv({ 
+        workspaceResolved: null, 
+        s3WorkspaceId: 'ws-2' 
+      });
+      const res = await makeSignedRequest('POST', '/s3/my-bucket-1/file.txt', env, '', { uploads: '' });
+      expect(res.status).toBe(404);
+      const body = await res.text();
+      expect(body).toBe('Bucket not found');
     });
   });
 });
