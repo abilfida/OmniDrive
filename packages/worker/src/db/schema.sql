@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     name            TEXT NOT NULL,
     owner_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     used_bytes      INTEGER DEFAULT 0,
+    sync_ttl_minutes INTEGER NOT NULL DEFAULT 5,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -72,6 +73,8 @@ CREATE TABLE IF NOT EXISTS workspace_folders (
     color           TEXT,
     is_starred      INTEGER NOT NULL DEFAULT 0,
     metadata        TEXT DEFAULT '{}',
+    last_synced_at  TEXT,
+    sync_status     TEXT NOT NULL DEFAULT 'idle',
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(workspace_id, parent_id, name)
@@ -97,6 +100,8 @@ CREATE TABLE IF NOT EXISTS files (
     metadata        TEXT DEFAULT '{}',
     google_created_at  TEXT,
     google_modified_at TEXT,
+    last_synced_at  TEXT,
+    sync_status     TEXT NOT NULL DEFAULT 'idle',
     synced_at       TEXT NOT NULL DEFAULT (datetime('now')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
