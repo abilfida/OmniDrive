@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { authGuard } from '../middleware/auth-guard';
 import { generateId } from '../lib/id';
 import { encrypt } from '../lib/crypto';
-import { getWorkspaceRole } from '../middleware/rbac';
+import { getWorkspaceRole, hasPermission } from '../middleware/rbac';
 import type { AppContext } from '../types/env';
 
 export const s3CredentialsRouter = new Hono<AppContext>();
@@ -16,7 +16,7 @@ s3CredentialsRouter.post('/', async (c) => {
 
   if (workspaceId) {
     const role = await getWorkspaceRole(db, workspaceId, userId);
-    if (!role || (role !== 'manager' && role !== 'owner')) {
+    if (!role || !hasPermission(role, 'manager')) {
       return c.json({ error: 'Unauthorized to manage S3 keys for this workspace' }, 403);
     }
   }

@@ -4,6 +4,18 @@ import { DriveAccountCard } from '../components/DriveAccountCard';
 import { useToastStore } from '../stores/toastStore';
 import { Plus, Key, X, Trash2, Copy, Check, AlertTriangle, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { api } from '../lib/api';
+
+const parseSqliteDate = (dateVal: any) => {
+  if (!dateVal) return new Date();
+  if (typeof dateVal === 'string') {
+    const normalized = dateVal.includes(' ') && !dateVal.includes('T')
+      ? dateVal.replace(' ', 'T') + 'Z'
+      : dateVal;
+    return new Date(normalized);
+  }
+  return new Date(dateVal);
+};
 
 export function SettingsPage() {
   const { drives, fetchDrives, removeDrive, triggerSync } = useDriveStore();
@@ -34,7 +46,6 @@ export function SettingsPage() {
   const loadData = async () => {
     setLoadingS3(true);
     try {
-      const { api } = await import('../lib/api');
       const [keys, wsData] = await Promise.all([
         api.getS3Credentials(),
         api.getWorkspaces()
@@ -62,7 +73,6 @@ export function SettingsPage() {
 
     setIsCreatingKey(true);
     try {
-      const { api } = await import('../lib/api');
       const result = await api.createS3Credential(
         newKeyDescription,
         newKeyScope || undefined
@@ -95,7 +105,6 @@ export function SettingsPage() {
       return;
     }
     try {
-      const { api } = await import('../lib/api');
       await api.deleteS3Credential(id);
       addToast('success', 'S3 key revoked successfully');
       // Refresh list
@@ -154,7 +163,6 @@ export function SettingsPage() {
   const handleAddServiceAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { api } = await import('../lib/api');
       await api.addServiceAccount(saCredentials, saFolderId);
       addToast('success', 'Service account added');
       setSaCredentials('');
@@ -327,7 +335,7 @@ export function SettingsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-xs text-gray-400">
-                        {new Date(key.created_at || key.createdAt).toLocaleString()}
+                        {parseSqliteDate(key.created_at || key.createdAt).toLocaleString()}
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         <button
@@ -412,7 +420,11 @@ export function SettingsPage() {
 
       {/* Success Modal - Credentials Display */}
       <Dialog open={createdCredential !== null} onOpenChange={(open) => !open && setCreatedCredential(null)}>
-        <DialogContent className="sm:max-w-[480px] rounded-2xl">
+        <DialogContent
+          className="sm:max-w-[480px] rounded-2xl"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block animate-ping" />
