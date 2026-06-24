@@ -189,12 +189,18 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
       .join('&');
       
     const signedHeadersList = signedHeaders.split(';').map(h => h.trim().toLowerCase());
-    let canonicalHeaders = '';
-    for (const headerName of signedHeadersList) {
-      const headerVal = c.req.header(headerName) || url.searchParams.get(headerName) || '';
-      const trimmedVal = headerVal.trim().replace(/\s+/g, ' ');
-      canonicalHeaders += `${headerName}:${trimmedVal}\n`;
-    }
+    
+    const getCanonicalHeaders = (overrides: Record<string, string> = {}) => {
+      let canonicalHeaders = '';
+      for (const headerName of signedHeadersList) {
+        const headerVal = overrides[headerName] !== undefined
+          ? overrides[headerName]
+          : (c.req.header(headerName) || url.searchParams.get(headerName) || '');
+        const trimmedVal = headerVal.trim().replace(/\s+/g, ' ');
+        canonicalHeaders += `${headerName}:${trimmedVal}\n`;
+      }
+      return canonicalHeaders;
+    };
     
     let payloadHash = c.req.header('x-amz-content-sha256');
     if (!payloadHash) {
@@ -205,8 +211,12 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
       }
     }
     
-    // Calculate expected signature using a helper that supports fallback paths
-    const checkSignatureForPath = (pathToCheck: string): { valid: boolean; calculated: string; canonical: string; stringToSign: string } => {
+    // Calculate expected signature using a helper that supports fallback paths and header overrides
+    const checkSignatureForPath = (
+      pathToCheck: string,
+      headerOverrides: Record<string, string> = {}
+    ): { valid: boolean; calculated: string; canonical: string; stringToSign: string } => {
+      const canonicalHeaders = getCanonicalHeaders(headerOverrides);
       const canonicalRequest = [
         c.req.method,
         pathToCheck,
@@ -236,26 +246,46 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
       return { valid, calculated: calculatedSignature, canonical: canonicalRequest, stringToSign };
     };
 
-    let result = checkSignatureForPath(rawPath);
-    
-    // Fallback 1: If rawPath starts with /s3, check signature without /s3 prefix
-    if (!result.valid && rawPath.startsWith('/s3')) {
-      let strippedPath = rawPath.slice(3); // Remove '/s3'
-      if (!strippedPath.startsWith('/')) {
-        strippedPath = '/' + strippedPath;
-      }
-      const fallbackResult = checkSignatureForPath(strippedPath);
-      if (fallbackResult.valid) {
-        result = fallbackResult;
-      }
+    // Accept-Encoding permutation setup
+    let acceptEncodingValues = [c.req.header('accept-encoding') || ''];
+    if (signedHeadersList.includes('accept-encoding')) {
+      // Add common fallbacks that proxies might have appended to or modified
+      acceptEncodingValues.push('gzip');
+      acceptEncodingValues.push('gzip, deflate');
+      acceptEncodingValues.push('identity');
+      acceptEncodingValues.push('');
     }
-    
-    // Fallback 2: If rawPath does not start with /s3, check signature with /s3 prefix
-    if (!result.valid && !rawPath.startsWith('/s3')) {
-      const prefixedPath = '/s3' + rawPath;
-      const fallbackResult = checkSignatureForPath(prefixedPath);
-      if (fallbackResult.valid) {
-        result = fallbackResult;
+
+    // Generate path candidates
+    const pathCandidates = [rawPath];
+    if (rawPath.startsWith('/s3')) {
+      let stripped = rawPath.slice(3);
+      if (!stripped.startsWith('/')) stripped = '/' + stripped;
+      pathCandidates.push(stripped);
+    } else {
+      pathCandidates.push('/s3' + rawPath);
+    }
+
+    let result = { valid: false, calculated: '', canonical: '', stringToSign: '' };
+
+    // Try all combinations of path candidates and accept-encoding overrides
+    outerLoop:
+    for (const pathCandidate of pathCandidates) {
+      for (const aeVal of acceptEncodingValues) {
+        const overrides = signedHeadersList.includes('accept-encoding')
+          ? { 'accept-encoding': aeVal }
+          : {};
+          
+        const testResult = checkSignatureForPath(pathCandidate, overrides);
+        if (testResult.valid) {
+          result = testResult;
+          break outerLoop;
+        } else {
+          // Keep the first result (or default) for error reporting if none matches
+          if (!result.calculated) {
+            result = testResult;
+          }
+        }
       }
     }
 

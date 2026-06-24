@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.7] - 2026-06-24
+
+### Fixed
+
+- **S3 Signature Accept-Encoding Header Normalization:** Fixed S3 signature mismatch error (`SignatureDoesNotMatch`) when external clients (such as Go S3/AWS SDKs) include `Accept-Encoding` in their `SignedHeaders`. Cloudflare Workers automatically normalizes/modifies the incoming `Accept-Encoding` header value (e.g. appending brotli/`br`), which breaks strict SigV4 validation. Implemented header permutation fallbacks to try signature verification against original/typical client `Accept-Encoding` values (like `gzip`, `gzip, deflate`, etc.) when the signature fails.
+
 ## [0.9.6] - 2026-06-24
 
 ### Added
