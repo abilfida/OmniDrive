@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.5] - 2026-06-24
+
+### Fixed
+
+- Fixed S3 signature verification mismatch (`SignatureDoesNotMatch`) error on `PutObject` requests from external clients like Portainer. Implemented path-fallback signing verification to support client requests that compute the signature either with or without the `/s3` endpoint sub-path prefix. Added detailed XML error response outputs and server logging for S3 signature failures to aid in troubleshooting.
+
 ## [0.9.4] - 2026-06-24
 
 ### Fixed

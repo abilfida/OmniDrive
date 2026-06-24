@@ -3,12 +3,21 @@ import { timingSafeEqual } from 'node:crypto';
 import { decrypt } from '../lib/crypto';
 import { hmacSha256, sha256 } from '../lib/crypto-s3';
 
-function returnXmlError(c: any, code: string, message: string, status = 403) {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+function returnXmlError(c: any, code: string, message: string, status = 403, extraFields: Record<string, string> = {}) {
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Error>
   <Code>${code}</Code>
-  <Message>${message}</Message>
-</Error>`;
+  <Message>${message}</Message>`;
+  for (const [key, value] of Object.entries(extraFields)) {
+    const escapedValue = value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+    xml += `\n  <${key}>${escapedValue}</${key}>`;
+  }
+  xml += '\n</Error>';
   c.header('Content-Type', 'application/xml');
   return c.text(xml, status);
 }
@@ -196,33 +205,77 @@ export const s3AuthMiddleware: MiddlewareHandler = async (c, next) => {
       }
     }
     
-    const canonicalRequest = [
-      c.req.method,
-      rawPath,
-      canonicalQueryString,
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash
-    ].join('\n');
+    // Calculate expected signature using a helper that supports fallback paths
+    const checkSignatureForPath = (pathToCheck: string): { valid: boolean; calculated: string; canonical: string; stringToSign: string } => {
+      const canonicalRequest = [
+        c.req.method,
+        pathToCheck,
+        canonicalQueryString,
+        canonicalHeaders,
+        signedHeaders,
+        payloadHash
+      ].join('\n');
+      
+      const stringToSign = [
+        'AWS4-HMAC-SHA256',
+        amzDate,
+        `${date}/${region}/${service}/aws4_request`,
+        sha256(canonicalRequest)
+      ].join('\n');
+      
+      const kDate = hmacSha256("AWS4" + rawSecretKey, date);
+      const kRegion = hmacSha256(kDate, region);
+      const kService = hmacSha256(kRegion, service);
+      const kSigning = hmacSha256(kService, 'aws4_request');
+      const calculatedSignature = hmacSha256(kSigning, stringToSign).toString('hex');
+      
+      const computedBuf = Buffer.from(calculatedSignature, 'hex');
+      const providedBuf = Buffer.from(signature, 'hex');
+      const valid = computedBuf.length === providedBuf.length && timingSafeEqual(computedBuf, providedBuf);
+      
+      return { valid, calculated: calculatedSignature, canonical: canonicalRequest, stringToSign };
+    };
+
+    let result = checkSignatureForPath(rawPath);
     
-    const stringToSign = [
-      'AWS4-HMAC-SHA256',
-      amzDate,
-      `${date}/${region}/${service}/aws4_request`,
-      sha256(canonicalRequest)
-    ].join('\n');
+    // Fallback 1: If rawPath starts with /s3, check signature without /s3 prefix
+    if (!result.valid && rawPath.startsWith('/s3')) {
+      let strippedPath = rawPath.slice(3); // Remove '/s3'
+      if (!strippedPath.startsWith('/')) {
+        strippedPath = '/' + strippedPath;
+      }
+      const fallbackResult = checkSignatureForPath(strippedPath);
+      if (fallbackResult.valid) {
+        result = fallbackResult;
+      }
+    }
     
-    // Calculate expected signature
-    const kDate = hmacSha256("AWS4" + rawSecretKey, date);
-    const kRegion = hmacSha256(kDate, region);
-    const kService = hmacSha256(kRegion, service);
-    const kSigning = hmacSha256(kService, 'aws4_request');
-    const calculatedSignature = hmacSha256(kSigning, stringToSign).toString('hex');
-    
-    const computedBuf = Buffer.from(calculatedSignature, 'hex');
-    const providedBuf = Buffer.from(signature, 'hex');
-    if (computedBuf.length !== providedBuf.length || !timingSafeEqual(computedBuf, providedBuf)) {
-      return returnXmlError(c, 'SignatureDoesNotMatch', 'The request signature we calculated does not match the signature you provided. Check your key and signing method.');
+    // Fallback 2: If rawPath does not start with /s3, check signature with /s3 prefix
+    if (!result.valid && !rawPath.startsWith('/s3')) {
+      const prefixedPath = '/s3' + rawPath;
+      const fallbackResult = checkSignatureForPath(prefixedPath);
+      if (fallbackResult.valid) {
+        result = fallbackResult;
+      }
+    }
+
+    if (!result.valid) {
+      console.error('S3 Signature Mismatch:', {
+        providedSignature: signature,
+        calculatedSignature: result.calculated,
+        canonicalRequest: result.canonical,
+        stringToSign: result.stringToSign
+      });
+      return returnXmlError(
+        c,
+        'SignatureDoesNotMatch',
+        'The request signature we calculated does not match the signature you provided. Check your key and signing method.',
+        403,
+        {
+          CanonicalRequest: result.canonical,
+          StringToSign: result.stringToSign
+        }
+      );
     }
     
     c.set('userId', cred.user_id);
