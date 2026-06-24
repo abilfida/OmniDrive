@@ -300,6 +300,74 @@ describe('S3 API compatibility endpoints', () => {
     expect(body).toContain('<Message>Bucket not found</Message>');
   });
 
+  it('returns 200 for HeadBucket request when bucket workspace is found', async () => {
+    const env = await getMockEnv({ workspaceResolved: { id: 'ws-1' } });
+
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    const path = '/s3/my-bucket-1';
+    const headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    const { signature, signedHeaders } = calculateSigV4({
+      method: 'HEAD',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await app.request(path, {
+      method: 'HEAD',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('');
+  });
+
+  it('returns 404 for HeadBucket request when bucket workspace is not found', async () => {
+    const env = await getMockEnv({ workspaceResolved: null });
+
+    const amzDate = '20260621T120000Z';
+    const dateStr = '20260621';
+    const path = '/s3/non-existent-bucket';
+    const headers = {
+      'host': 'localhost:8787',
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': sha256('')
+    };
+
+    const { signature, signedHeaders } = calculateSigV4({
+      method: 'HEAD',
+      path,
+      headers,
+      dateStr,
+      amzDate
+    });
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY_ID}/${dateStr}/us-east-1/s3/aws4_request, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const res = await app.request(path, {
+      method: 'HEAD',
+      headers: {
+        ...headers,
+        'Authorization': authHeader
+      }
+    }, env);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe('');
+  });
+
   it('returns 200 and list of objects (no delimiter)', async () => {
     const workspaceResolved = { id: 'ws-1' };
     const files = [

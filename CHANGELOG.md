@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.6] - 2026-06-24
+
+### Added
+
+- **S3 HeadBucket API Route:** Implemented the `HEAD /s3/:bucket` (HeadBucket) endpoint. This allows external tools like Portainer to verify that a bucket (Workspace) exists and is accessible before launching backups, resolving connection validation failures.
+
 ## [0.9.5] - 2026-06-24
 
 ### Fixed

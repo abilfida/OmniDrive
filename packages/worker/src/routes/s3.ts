@@ -96,13 +96,11 @@ ${bucketsXml}  </Buckets>
   return c.text(xml, 200, { 'Content-Type': 'application/xml' });
 });
 
-// GET /s3/:bucket (List Objects V2)
-s3Router.get('/:bucket', async (c) => {
+// GET /s3/:bucket (List Objects V2) or HEAD /s3/:bucket (HeadBucket)
+s3Router.on(['GET', 'HEAD'], '/:bucket', async (c) => {
   const userId = c.get('userId');
   const s3WorkspaceId = c.get('s3WorkspaceId') || null;
   const bucketName = c.req.param('bucket');
-  const prefix = c.req.query('prefix') || '';
-  const delimiter = c.req.query('delimiter') || '';
   const db = c.env.DB;
 
   // Resolve Workspace by Bucket Name
@@ -116,8 +114,19 @@ s3Router.get('/:bucket', async (c) => {
   if (!workspace) {
     const errorCode = 'NoSuchBucket';
     const errorMessage = 'Bucket not found';
+    if (c.req.method === 'HEAD') {
+      c.header('Content-Type', 'application/xml');
+      return c.body(null, 404);
+    }
     return c.text(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>${escapeXml(errorCode)}</Code><Message>${escapeXml(errorMessage)}</Message></Error>`, 404, { 'Content-Type': 'application/xml' });
   }
+
+  if (c.req.method === 'HEAD') {
+    return c.body(null, 200);
+  }
+
+  const prefix = c.req.query('prefix') || '';
+  const delimiter = c.req.query('delimiter') || '';
 
   // Recursive SQLite CTE to assemble flat S3 keys for all workspace files
   const { results: files } = await db.prepare(`
