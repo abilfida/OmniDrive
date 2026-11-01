@@ -25,6 +25,9 @@ export function resetD1(execSync, flag) {
   
   // Daftar tabel diurutkan dari child ke parent untuk menghindari error foreign keys di D1
   const TABLES_TO_DROP = [
+    's3_multipart_parts',
+    's3_multipart_uploads',
+    's3_credentials',
     'shared_link_logs',
     'automation_logs',
     'sync_state',

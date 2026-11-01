@@ -16,6 +16,10 @@ describe('reset.mjs D1 logic', () => {
     expect(execSyncMock).toHaveBeenCalledTimes(2);
     expect(execSyncMock.mock.calls[0][0]).toContain('DROP TABLE IF EXISTS shared_link_logs');
     expect(execSyncMock.mock.calls[0][0]).toContain('DROP TABLE IF EXISTS users');
+    // S3 tables keep their old schema across a factory reset unless dropped too
+    for (const table of ['s3_multipart_parts', 's3_multipart_uploads', 's3_credentials']) {
+      expect(execSyncMock.mock.calls[0][0]).toContain(`DROP TABLE IF EXISTS ${table}`);
+    }
     expect(execSyncMock.mock.calls[1][0]).toContain('d1 execute omnidrive --local -y --file=src/db/schema.sql');
   });
 });
