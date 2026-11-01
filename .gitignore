@@ -20,7 +20,8 @@ wrangler.toml
 # Local databases and data dumps (may contain user data)
 *.sqlite
 *.sqlite-*
-**/data/
+/data/
+packages/worker/data/
 db_export*.sql
 
 # Local overrides

@@ -4,19 +4,18 @@
 **/dist
 build
 
-# Secrets and local config
+# Secrets and local config. This also excludes packages/web/.env.production,
+# which points at the hosted Cloudflare worker: Docker images must build the
+# web app against a same-origin API.
 **/.env
 **/.env.*
 !.env.example
 **/.dev.vars
 
-# The web build must default to same-origin API in Docker images;
-# packages/web/.env.production points at the Cloudflare worker.
-packages/web/.env.production
-
 # Local data and dumps
-**/data
+data
+packages/worker/data
 **/*.sqlite
 **/*.sqlite-*
 **/db_export*.sql
-*.log
+**/*.log
