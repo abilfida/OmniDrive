@@ -19,7 +19,7 @@
     "dev": "node -r dotenv/config ./node_modules/.bin/concurrently \"npm run dev:worker\" \"npm run dev:web\"",
     "build:worker": "npm run build -w packages/worker",
     "build:web": "npm run build -w packages/web",
-    "test": "npm run test -w packages/worker"
+    "test": "npm run test -w packages/worker && npm run test -w packages/web"
   },
   "devDependencies": {
     "@clack/prompts": "^1.5.1",
