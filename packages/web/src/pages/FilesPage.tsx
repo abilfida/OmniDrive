@@ -205,7 +205,7 @@ export function FilesPage() {
         )}
 
         {/* Modals */}
-        {showModal && <UploadModal folderId={folderId} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); refresh(); }} />}
+        {showModal && <UploadModal parentFolderId={folderId !== 'root' && driveIdParam ? folderId : undefined} driveId={driveIdParam ?? undefined} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); refresh(); }} />}
         {previewFile && <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
         {shareTarget && (
           <ShareModal

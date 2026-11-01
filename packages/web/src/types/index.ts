@@ -132,6 +132,15 @@ export interface DriveFolderContents {
   breadcrumb: BreadcrumbItem[];
 }
 
+// Where an upload goes. parentFolderId is a Google folder ID and needs driveAccountId;
+// workspaceFolderId places the file in a workspace (the workspace is derived from it).
+export interface UploadTarget {
+  driveAccountId?: string;
+  parentFolderId?: string;
+  workspaceId?: string;
+  workspaceFolderId?: string;
+}
+
 export interface UploadInitResponse {
   uploadUrl: string;
   driveAccountId: string;

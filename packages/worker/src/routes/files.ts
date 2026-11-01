@@ -3,8 +3,9 @@ import type { AppContext } from '../types/env';
 import { generateId } from '../lib/id';
 import { authGuard } from '../middleware/auth-guard';
 import { AppError } from '../middleware/error-handler';
-import { DriveService } from '../services/drive.service';
 import { GoogleDriveService } from '../services/google-drive';
+import { resolveParentId } from '../services/sync';
+import { getWorkspaceRole, hasPermission } from '../middleware/rbac';
 import { UploadRouter } from '../services/upload-router';
 import { AutomationEngine } from '../services/automation.service';
 import { PolicyService } from '../services/policy.service';
@@ -345,22 +346,62 @@ filesRouter.post('/:id/move-drive', async (c) => {
   }
 });
 
+// Resolves and authorizes the workspace a new upload is placed in. The workspace
+// is derived from the folder when one is given, so the two can never disagree.
+async function resolveUploadWorkspace(
+  db: D1Database,
+  userId: string,
+  workspaceId?: string | null,
+  workspaceFolderId?: string | null
+): Promise<{ workspaceId: string | null; workspaceFolderId: string | null }> {
+  if (workspaceFolderId) {
+    const folder = await db.prepare('SELECT workspace_id FROM workspace_folders WHERE id = ?')
+      .bind(workspaceFolderId).first<{ workspace_id: string }>();
+    if (!folder) throw new AppError(404, 'Workspace folder not found');
+    if (workspaceId && workspaceId !== folder.workspace_id) {
+      throw new AppError(400, 'Workspace folder does not belong to this workspace');
+    }
+    workspaceId = folder.workspace_id;
+  }
+  if (!workspaceId) return { workspaceId: null, workspaceFolderId: null };
+
+  const role = await getWorkspaceRole(db, workspaceId, userId);
+  if (!role || !hasPermission(role, 'editor')) {
+    throw new AppError(403, 'Editor access to this workspace is required');
+  }
+  return { workspaceId, workspaceFolderId: workspaceFolderId || null };
+}
+
 // Initialize upload (returns Google Drive Resumable URL)
 filesRouter.post('/upload/init', async (c) => {
   const userId = c.get('userId');
-  const { name, mimeType, size, folderId, workspaceId } = await c.req.json();
-  console.log(`Init upload for folder: ${folderId}`); // prevent unused var error
+  const { name, mimeType, size, driveAccountId, parentFolderId, workspaceId, workspaceFolderId } = await c.req.json<{
+    name?: string;
+    mimeType?: string;
+    size?: number;
+    driveAccountId?: string;
+    parentFolderId?: string; // Google folder ID inside driveAccountId
+    workspaceId?: string;
+    workspaceFolderId?: string;
+  }>();
   const db = c.env.DB;
 
-  if (workspaceId && size) {
+  if (!name || typeof name !== 'string') throw new AppError(400, 'File name is required');
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) throw new AppError(400, 'File size is required');
+  if (parentFolderId && !driveAccountId) {
+    throw new AppError(400, 'driveAccountId is required when uploading into a Google folder');
+  }
+
+  const target = await resolveUploadWorkspace(db, userId, workspaceId, workspaceFolderId);
+  if (target.workspaceId) {
     const policyService = new PolicyService(db);
-    const hasQuota = await policyService.checkQuota(workspaceId, size);
+    const hasQuota = await policyService.checkQuota(target.workspaceId, size);
     if (!hasQuota) {
       return c.json({ error: 'Storage quota exceeded' }, 403);
     }
   }
 
-  // 1. Get all drives to calculate routing
+  // 1. Pick the drive: the one the user chose, or the one with the most free space
   const { results: driveRows } = await db.prepare('SELECT * FROM drive_accounts WHERE user_id = ?').bind(userId).all();
   if (driveRows.length === 0) throw new AppError(400, 'No connected drives');
 
@@ -369,43 +410,37 @@ filesRouter.post('/upload/init', async (c) => {
     freeSpace: Math.max(0, d.totalQuota - d.usedQuota),
     usagePercent: d.totalQuota > 0 ? (d.usedQuota / d.totalQuota) * 100 : 0
   }));
+  const targetDrive = new UploadRouter(drives).selectDriveForUpload(size, driveAccountId);
 
-  // 2. Select target drive using UploadRouter
-  const router = new UploadRouter(drives);
-  const targetDrive = router.selectDriveForUpload(size);
-
-  // 3. Get token for target drive
-  const tokenJson = await c.env.KV.get(`tokens:${targetDrive.id}`);
-  if (!tokenJson) throw new AppError(401, 'Drive token missing');
-  const tokens = JSON.parse(tokenJson);
-
-  // 4. Create resumable upload session in Google Drive
-  const driveService = new DriveService(c.env, targetDrive.id, tokens);
-  
-  // Note: we place it in root or a specific Omnidrive hidden folder inside Google Drive.
-  // For simplicity, we just put it in root of that specific Drive.
-  const uploadUrl = await driveService.createResumableUploadSession({
+  // 2. Open a resumable session; the browser streams the bytes straight to Google
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
+  const uploadUrl = await driveService.initiateResumableUpload(
+    targetDrive.id,
     name,
-    mimeType,
-  });
+    mimeType || 'application/octet-stream',
+    parentFolderId || 'root',
+    c.env.FRONTEND_URL
+  );
 
-  // 5. Return the URL so the client can stream bytes directly to Google
   return c.json({
     uploadUrl,
     driveAccountId: targetDrive.id,
-    googleFolderId: targetDrive.rootFolderId,
+    googleFolderId: parentFolderId || 'root',
   });
 });
 
 filesRouter.post('/upload/finalize', async (c) => {
   const userId = c.get('userId');
-  const { googleFileId, driveAccountId, virtualFolderId, workspaceFolderId, workspaceId } = await c.req.json();
+  const { googleFileId, driveAccountId, workspaceFolderId, workspaceId } = await c.req.json<{
+    googleFileId?: string;
+    driveAccountId?: string;
+    workspaceId?: string;
+    workspaceFolderId?: string;
+  }>();
 
   if (!googleFileId || !driveAccountId) {
     throw new AppError(400, 'Missing required fields: googleFileId, driveAccountId');
   }
-
-  const finalFolderId = workspaceFolderId || virtualFolderId;
 
   // Verify drive belongs to user
   const db = c.env.DB;
@@ -416,29 +451,51 @@ filesRouter.post('/upload/finalize', async (c) => {
     throw new AppError(404, 'Drive account not found or unauthorized');
   }
 
+  const target = await resolveUploadWorkspace(db, userId, workspaceId, workspaceFolderId);
+
   // Fetch file metadata from Google Drive
   const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
-  const gFile = await driveService.getFile(driveAccountId, googleFileId);
-
-  const id = generateId();
+  const [gFile, rootFolderId] = await Promise.all([
+    driveService.getFile(driveAccountId, googleFileId),
+    driveService.getRootFolderId(driveAccountId),
+  ]);
+  // Same parent convention as sync, so the file appears in drive folder listings
+  const googleParentId = resolveParentId(gFile.parents, rootFolderId, false);
   const fileSize = parseInt(gFile.size || '0', 10);
-  
+
+  // Sync may already have inserted this file, or the client may be retrying.
+  const existing = await db.prepare('SELECT id, workspace_id FROM files WHERE drive_account_id = ? AND google_file_id = ?')
+    .bind(driveAccountId, gFile.id).first<{ id: string; workspace_id: string | null }>();
+  const id = existing?.id ?? generateId();
+
   await db.prepare(`
     INSERT INTO files (
-      id, user_id, drive_account_id, workspace_id, workspace_folder_id, 
+      id, user_id, drive_account_id, workspace_id, workspace_folder_id, google_parent_id,
       google_file_id, name, mime_type, size, thumbnail_url, web_view_link, web_content_link,
       google_created_at, google_modified_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(drive_account_id, google_file_id) DO UPDATE SET
+      workspace_id = COALESCE(excluded.workspace_id, files.workspace_id),
+      workspace_folder_id = COALESCE(excluded.workspace_folder_id, files.workspace_folder_id),
+      google_parent_id = excluded.google_parent_id,
+      name = excluded.name,
+      mime_type = excluded.mime_type,
+      size = excluded.size,
+      thumbnail_url = excluded.thumbnail_url,
+      web_view_link = excluded.web_view_link,
+      web_content_link = excluded.web_content_link,
+      google_modified_at = excluded.google_modified_at
   `).bind(
-    id, userId, driveAccountId, workspaceId || null, finalFolderId || null,
+    id, userId, driveAccountId, target.workspaceId, target.workspaceFolderId, googleParentId,
     gFile.id, gFile.name, gFile.mimeType, fileSize,
     gFile.thumbnailLink || null, gFile.webViewLink || null, gFile.webContentLink || null,
     gFile.createdTime, gFile.modifiedTime
   ).run();
 
-  if (workspaceId && fileSize > 0) {
+  // Count the bytes against the workspace only the first time the file lands in it
+  if (target.workspaceId && fileSize > 0 && existing?.workspace_id !== target.workspaceId) {
     const policyService = new PolicyService(db);
-    await policyService.updateWorkspaceStorage(workspaceId, fileSize);
+    await policyService.updateWorkspaceStorage(target.workspaceId, fileSize);
   }
 
   // Invalidate quota cache
@@ -556,7 +613,6 @@ filesRouter.patch('/:id/metadata', async (c) => {
   if (!file) throw new AppError(404, 'File not found');
 
   if (file.workspace_id) {
-    const { getWorkspaceRole, hasPermission } = await import('../middleware/rbac');
     const role = await getWorkspaceRole(db, file.workspace_id, userId);
     if (!role || !hasPermission(role, 'editor')) {
       throw new AppError(403, 'Forbidden');

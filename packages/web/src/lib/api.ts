@@ -96,12 +96,12 @@ export const api = {
   getFile: (id: string) => request<import('../types').FileEntry>(`/api/files/${id}`),
   searchFiles: (query: string) =>
     request<{ files: import('../types').FileEntry[]; query: string }>(`/api/files/search?q=${encodeURIComponent(query)}`),
-  initiateUpload: (data: { name: string; mimeType: string; size: number; driveAccountId?: string; workspaceFolderId?: string }) =>
+  initiateUpload: (data: { name: string; mimeType: string; size: number } & import('../types').UploadTarget) =>
     request<import('../types').UploadInitResponse>('/api/files/upload/init', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  confirmUpload: (data: { googleFileId: string; driveAccountId: string; workspaceFolderId?: string }) =>
+  confirmUpload: (data: { googleFileId: string; driveAccountId: string; workspaceId?: string; workspaceFolderId?: string }) =>
     request<{ file: import('../types').FileEntry }>('/api/files/upload/finalize', {
       method: 'POST',
       body: JSON.stringify(data),

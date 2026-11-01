@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import type { UploadTarget } from '../types';
 
 export interface UploadItem {
   id: string;
@@ -16,7 +17,7 @@ interface UploadState {
   addFiles: (files: File[]) => void;
   removeFile: (id: string) => void;
   clearQueue: () => void;
-  startUpload: (driveAccountId?: string, workspaceFolderId?: string) => Promise<void>;
+  startUpload: (target?: UploadTarget) => Promise<{ failed: number }>;
   setShowModal: (show: boolean) => void;
 }
 
@@ -41,9 +42,10 @@ export const useUploadStore = create<UploadState>((set, get) => ({
 
   clearQueue: () => set({ queue: [], isUploading: false }),
 
-  startUpload: async (driveAccountId?: string, workspaceFolderId?: string) => {
+  startUpload: async (target: UploadTarget = {}) => {
     set({ isUploading: true });
     const { queue } = get();
+    let failed = 0;
 
     for (const item of queue) {
       if (item.status !== 'pending') continue;
@@ -59,8 +61,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
           name: item.file.name,
           mimeType: item.file.type || 'application/octet-stream',
           size: item.file.size,
-          driveAccountId,
-          workspaceFolderId,
+          ...target,
         });
 
         // 2. Upload directly to Google Drive
@@ -78,13 +79,15 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         await api.confirmUpload({
           googleFileId: uploadResponse.id,
           driveAccountId: actualDriveId,
-          workspaceFolderId,
+          workspaceId: target.workspaceId,
+          workspaceFolderId: target.workspaceFolderId,
         });
 
         set((state) => ({
           queue: state.queue.map((q) => (q.id === item.id ? { ...q, status: 'done' as const } : q)),
         }));
       } catch (err) {
+        failed++;
         set((state) => ({
           queue: state.queue.map((q) =>
             q.id === item.id ? { ...q, status: 'error' as const, error: (err as Error).message } : q
@@ -94,6 +97,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     }
 
     set({ isUploading: false });
+    return { failed };
   },
 
   setShowModal: (show: boolean) => set({ showModal: show }),
@@ -114,14 +118,19 @@ async function uploadToGoogleDrive(
     });
 
     xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText));
-      } else {
+      if (xhr.status < 200 || xhr.status >= 300) {
         reject(new Error(`Upload failed: ${xhr.status}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch {
+        reject(new Error('Upload finished but Google returned an unreadable response'));
       }
     });
 
     xhr.addEventListener('error', () => reject(new Error('Upload network error')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
 
     xhr.open('PUT', uploadUrl);
     xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
