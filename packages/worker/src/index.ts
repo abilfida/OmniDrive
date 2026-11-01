@@ -4,7 +4,7 @@ import type { AppContext, Env } from './types/env';
 import { corsMiddleware } from './middleware/cors';
 import { securityHeaders } from './middleware/security-headers';
 import { csrfGuard } from './middleware/csrf-guard';
-import { rateLimiter } from './middleware/rate-limiter';
+import { rateLimiter, clientIp } from './middleware/rate-limiter';
 import { runScheduledSync } from './services/sync';
 import { AuditService } from './services/audit.service';
 import { PolicyService } from './services/policy.service';
@@ -86,7 +86,7 @@ app.use('/api/shared/:id/verify', rateLimiter({
   windowMs: 60_000,
   maxRequests: 5,
   keyFn: (c: any) => {
-    const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Real-IP') ?? 'unknown';
+    const ip = clientIp(c);
     const id = c.req.param('id') ?? 'unknown';
     return `${ip}:${id}`;
   },
