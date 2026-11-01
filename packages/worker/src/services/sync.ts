@@ -17,7 +17,7 @@ import type { Env } from '../types/env';
 const MIME_TYPE_FOLDER = 'application/vnd.google-apps.folder';
 const MIME_TYPE_SHORTCUT = 'application/vnd.google-apps.shortcut';
 
-function resolveParentId(parents: string[] | undefined | null, rootFolderId: string, isFolder: boolean): string | null {
+export function resolveParentId(parents: string[] | undefined | null, rootFolderId: string, isFolder: boolean): string | null {
   const defaultParent = isFolder ? null : 'root';
   const parentId = parents?.[0] ?? defaultParent;
   return parentId === rootFolderId ? defaultParent : parentId;

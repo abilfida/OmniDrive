@@ -201,19 +201,24 @@ export class GoogleDriveService {
     driveAccountId: string,
     fileName: string,
     mimeType: string,
-    parentFolderId: string
+    parentFolderId: string,
+    // Browser uploads must pass their origin, or Google rejects the CORS upload to the session URL.
+    browserOrigin?: string
   ): Promise<string> {
     const token = await this.getValidToken(driveAccountId);
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-Upload-Content-Type': mimeType,
+    };
+    if (browserOrigin) headers.Origin = browserOrigin;
 
     const response = await fetch(
       `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Upload-Content-Type': mimeType,
-        },
+        headers,
         body: JSON.stringify({
           name: fileName,
           parents: [parentFolderId],
@@ -240,7 +245,7 @@ export class GoogleDriveService {
     googleFileId: string
   ): Promise<GDriveFile> {
     const token = await this.getValidToken(driveAccountId);
-    const fields = 'id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum';
+    const fields = 'id,name,mimeType,size,parents,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum';
 
     const response = await fetch(`${DRIVE_API}/files/${googleFileId}?fields=${fields}`, {
       headers: { Authorization: `Bearer ${token}` },

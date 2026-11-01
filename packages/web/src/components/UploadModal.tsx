@@ -6,22 +6,35 @@ import { formatFileSize, getDriveColor } from '../lib/utils';
 import { useState } from 'react';
 
 interface UploadModalProps {
-  folderId?: string;
+  parentFolderId?: string; // Google folder ID inside driveId; locks the target drive
   driveId?: string; // Optional: prepopulate if in a specific drive
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function UploadModal({ folderId, driveId, onClose, onSuccess }: UploadModalProps) {
+export function UploadModal({ parentFolderId, driveId, onClose, onSuccess }: UploadModalProps) {
   const { queue, isUploading, removeFile, startUpload, clearQueue } = useUploadStore();
   const { drives } = useDriveStore();
   const { addToast } = useToastStore();
   const [selectedDriveId, setSelectedDriveId] = useState<string>(driveId || '');
 
+  // A Google folder only exists in its own drive, so the drive can't be changed there.
+  const isFolderUpload = Boolean(parentFolderId && driveId);
+
   const handleUpload = async () => {
     try {
-      await startUpload(selectedDriveId || undefined, folderId);
+      const { failed } = await startUpload(
+        isFolderUpload
+          ? { driveAccountId: driveId, parentFolderId }
+          : { driveAccountId: selectedDriveId || undefined }
+      );
+      if (failed > 0) {
+        // Keep the modal open so the failed items and their errors stay visible
+        addToast('error', `${failed} file(s) failed to upload`);
+        return;
+      }
       addToast('success', 'Upload completed');
+      clearQueue();
       onSuccess();
     } catch {
       addToast('error', 'Upload failed');
@@ -107,7 +120,7 @@ export function UploadModal({ folderId, driveId, onClose, onSuccess }: UploadMod
         </div>
 
         {/* Drive selector */}
-        {!isUploading && !allDone && (
+        {!isUploading && !allDone && !isFolderUpload && (
           <div className="p-6 pb-2">
             <label className="block text-sm font-medium text-gray-700 mb-3">
               Target Drive
