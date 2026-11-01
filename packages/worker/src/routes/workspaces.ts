@@ -194,6 +194,20 @@ workspacesRouter.post('/:id/policies', async (c) => {
     return c.json({ error: 'storage_quota must target a workspace' }, 400);
   }
 
+  // A malformed config used to break quota checks (missing max_bytes blocked
+  // every upload) and the retention job (missing days threw on every run).
+  if (policyType === 'storage_quota' && !(typeof config.max_bytes === 'number' && config.max_bytes > 0)) {
+    return c.json({ error: 'storage_quota requires a positive max_bytes' }, 400);
+  }
+  if (policyType === 'data_retention') {
+    if (!['prevent_deletion', 'auto_delete'].includes(config.action)) {
+      return c.json({ error: "data_retention action must be 'prevent_deletion' or 'auto_delete'" }, 400);
+    }
+    if (config.action === 'auto_delete' && !(Number.isInteger(config.days) && config.days >= 1)) {
+      return c.json({ error: 'auto_delete requires days to be a whole number of at least 1' }, 400);
+    }
+  }
+
   const policyId = generateId();
 
   await db.prepare(`
