@@ -2,7 +2,7 @@ import { intro, outro, select, text, isCancel, cancel, spinner, confirm } from '
 import pc from 'picocolors';
 import fs from 'fs';
 import crypto from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 
 function runCmd(cmd) {
   try {
@@ -23,6 +23,51 @@ function runCmdSilent(cmd) {
 
 function generateSecret(length = 32) {
   return crypto.randomBytes(length / 2).toString('hex');
+}
+
+// Reads KEY=VALUE pairs from an env file, or {} if it doesn't exist.
+function readEnvFile(path) {
+  if (!fs.existsSync(path)) return {};
+  const values = {};
+  for (const line of fs.readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (match) values[match[1]] = match[2].trim();
+  }
+  return values;
+}
+
+// Stored Drive tokens and S3 keys are encrypted with TOKEN_ENCRYPTION_KEY, so an
+// existing key must survive re-running the wizard; a new one would make every
+// connected drive and S3 key unreadable. JWT_SECRET is kept too, so share-link
+// sessions aren't signed out needlessly.
+function secretsFrom(existing) {
+  return {
+    jwtSecret: existing.JWT_SECRET || generateSecret(64),
+    tokenEncryptionKey: existing.TOKEN_ENCRYPTION_KEY || generateSecret(64),
+  };
+}
+
+// Passes the value on stdin without a shell, so quotes, $ or backticks in it
+// can't break or inject into the command. Aborts the wizard on failure.
+function putWorkerSecret(name, value) {
+  try {
+    execFileSync('npx', ['wrangler', 'secret', 'put', name, '-c', 'packages/worker/wrangler.toml'], {
+      input: value,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+  } catch (e) {
+    cancel(`Failed to set Cloudflare secret ${name}: ${e.stderr?.toString().trim() || e.message}`);
+    process.exit(1);
+  }
+}
+
+function existingWorkerSecrets() {
+  const raw = runCmdSilent('npx wrangler secret list -c packages/worker/wrangler.toml');
+  try {
+    return new Set(JSON.parse(raw).map((secret) => secret.name));
+  } catch {
+    return new Set();
+  }
 }
 
 function checkCancel(val) {
@@ -150,8 +195,7 @@ async function main() {
     const s = spinner();
     s.start('Generating secrets and configuring environment...');
 
-    const jwtSecret = generateSecret(32);
-    const tokenEncryptionKey = generateSecret(32);
+    const { jwtSecret, tokenEncryptionKey } = secretsFrom(readEnvFile('.env'));
 
     const envContent = `PORT=${port}\nFRONTEND_URL=${frontendUrl}\nWORKER_URL=${workerUrl}\nGOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
     fs.writeFileSync('.env', envContent);
@@ -293,15 +337,15 @@ async function main() {
       const sSec = spinner();
       sSec.start('Pushing secrets to Cloudflare...');
       
-      const jwtSecret = generateSecret(32);
-      const tokenEncryptionKey = generateSecret(32);
+      const existing = existingWorkerSecrets();
 
-      runCmdSilent(`echo "${frontendUrl}" | npx wrangler secret put FRONTEND_URL -c packages/worker/wrangler.toml`);
-      runCmdSilent(`echo "${workerUrl}" | npx wrangler secret put WORKER_URL -c packages/worker/wrangler.toml`);
-      if (clientId) runCmdSilent(`echo "${clientId}" | npx wrangler secret put GOOGLE_CLIENT_ID -c packages/worker/wrangler.toml`);
-      if (clientSecret) runCmdSilent(`echo "${clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET -c packages/worker/wrangler.toml`);
-      runCmdSilent(`echo "${jwtSecret}" | npx wrangler secret put JWT_SECRET -c packages/worker/wrangler.toml`);
-      runCmdSilent(`echo "${tokenEncryptionKey}" | npx wrangler secret put TOKEN_ENCRYPTION_KEY -c packages/worker/wrangler.toml`);
+      putWorkerSecret('FRONTEND_URL', frontendUrl);
+      putWorkerSecret('WORKER_URL', workerUrl);
+      if (clientId) putWorkerSecret('GOOGLE_CLIENT_ID', clientId);
+      if (clientSecret) putWorkerSecret('GOOGLE_CLIENT_SECRET', clientSecret);
+      // Never replace these on an existing deployment (see secretsFrom).
+      if (!existing.has('JWT_SECRET')) putWorkerSecret('JWT_SECRET', generateSecret(64));
+      if (!existing.has('TOKEN_ENCRYPTION_KEY')) putWorkerSecret('TOKEN_ENCRYPTION_KEY', generateSecret(64));
 
       sSec.stop('Secrets provisioned.');
     }
@@ -332,8 +376,7 @@ async function main() {
       const s1 = spinner();
       s1.start('Setting up local environment...');
 
-      const jwtSecret = generateSecret(32);
-      const tokenEncryptionKey = generateSecret(32);
+      const { jwtSecret, tokenEncryptionKey } = secretsFrom(readEnvFile('packages/worker/.dev.vars'));
 
       const devVarsContent = `FRONTEND_URL=${frontendUrl}\nWORKER_URL=${workerUrl}\nGOOGLE_CLIENT_ID=${clientId}\nGOOGLE_CLIENT_SECRET=${clientSecret}\nJWT_SECRET=${jwtSecret}\nTOKEN_ENCRYPTION_KEY=${tokenEncryptionKey}\n`;
       
