@@ -29,10 +29,14 @@ export async function syncDriveFolder(_env: Env, _driveId: string, _folderId: st
   // implemented by another task
 }
 
+// Change token captured when an initial listing starts. It is kept in KV (not
+// sync_state) so a listing that spans several cron runs resumes with it.
+const startTokenKey = (driveId: string) => `sync:start_token:${driveId}`;
+
 export async function syncDriveAccount(
   drive: DriveAccount,
   db: D1Database,
-  _kv: KVNamespace,
+  kv: KVNamespace,
   driveService: GoogleDriveService
 ): Promise<void> {
   // Update status to syncing
@@ -51,11 +55,18 @@ export async function syncDriveAccount(
     let nextPageToken = syncState?.next_page_token;
 
     if (!changeToken) {
+      // Take the change token *before* listing: anything created, renamed or
+      // deleted while the listing runs is then replayed by the next incremental sync.
+      let startToken = nextPageToken ? await kv.get(startTokenKey(drive.id)) : null;
+      if (!startToken) {
+        startToken = await driveService.getStartPageToken(drive.id);
+        await kv.put(startTokenKey(drive.id), startToken);
+      }
       const completed = await performInitialSync(drive, db, driveService, nextPageToken ?? undefined);
       if (!completed) {
         throw new Error('Initial sync interrupted by shutdown');
       }
-      changeToken = await driveService.getStartPageToken(drive.id);
+      changeToken = startToken;
     } else {
       changeToken = await performIncrementalSync(drive, db, changeToken, driveService);
     }
@@ -66,6 +77,7 @@ export async function syncDriveAccount(
       )
       .bind(drive.id, changeToken)
       .run();
+    await kv.delete(startTokenKey(drive.id));
 
     try {
       await driveService.getQuota(drive.id);
