@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] - 2026-11-01
+
+### Security
+
+- **Self-hosted server no longer starts with default secrets:** The Node/Docker server used hard-coded fallback values for `JWT_SECRET` and `TOKEN_ENCRYPTION_KEY` when they were not set, so share-link sessions could be forged and stored tokens were encrypted with a public key. It now exits at startup when either is missing or when `JWT_SECRET` is shorter than 32 characters, and logs warnings for a short `TOKEN_ENCRYPTION_KEY`, missing Google credentials and a missing `FRONTEND_URL`/`WORKER_URL`. `docker-compose.yml` also refuses to start without both secrets.
+- **Docker images call their own API:** The web app inside Docker images was built with the hosted Cloudflare worker URL. Images now build against a same-origin API by default (`VITE_API_URL` build arg).
+- Removed a committed database export and tightened ignore rules so secrets, SQLite files and database dumps stay out of git and the Docker build context.
+
+### Upgrade notes
+
+- Set `JWT_SECRET` (at least 32 characters) and `TOKEN_ENCRYPTION_KEY` in your `.env` before upgrading a Docker install. Generate values with `openssl rand -hex 32`.
+- Do **not** change an existing `TOKEN_ENCRYPTION_KEY`: stored Google Drive tokens and S3 keys are encrypted with it. Replacing `JWT_SECRET` only signs out password-protected share-link sessions.
+
 ## [0.9.7] - 2026-06-24
 
 ### Fixed
