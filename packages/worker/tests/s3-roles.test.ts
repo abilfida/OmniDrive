@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { app } from '../src/index';
-import { createTestEnv, seedUser, type TestEnv } from './helpers/app-harness';
+import { createTestEnv, seedUser, ENCRYPTION_KEY, type TestEnv } from './helpers/app-harness';
+import { encrypt } from '../src/lib/crypto';
 
 // SigV4 itself is covered by s3-auth.test.ts; here the caller is taken from a test header.
 vi.mock('../src/middleware/s3-auth', () => ({
@@ -52,5 +53,40 @@ describe('S3 API workspace roles', () => {
   it('still hides buckets from non-members', async () => {
     await seedUser(t, 'outsider');
     expect((await s3('outsider', 'DELETE', '/s3/team/a.txt')).status).toBe(404);
+  });
+
+  it('stores the decoded bytes of an aws-chunked PutObject (current AWS SDK default)', async () => {
+    await t.db.prepare("UPDATE drive_accounts SET total_quota = 1000000 WHERE id = 'drive-e'").run();
+    await t.env.KV.put('tokens:drive-e', await encrypt(JSON.stringify({ accessToken: 'a', refreshToken: 'r', expiresAt: Date.now() + 3_600_000 }), ENCRYPTION_KEY));
+    let uploaded = '';
+    let uploadLength: string | null = null;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('uploadType=resumable')) return new Response(null, { headers: { Location: 'https://upload.test/session' } });
+      if (url === 'https://upload.test/session') {
+        uploadLength = new Headers(init?.headers).get('Content-Length');
+        uploaded = await new Response(init?.body as BodyInit).text();
+        return Response.json({ id: 'g-new', name: 'b.txt', mimeType: 'text/plain', size: String(uploaded.length), createdTime: 't', modifiedTime: 't' });
+      }
+      return Response.json({});
+    }));
+
+    const body = '5;chunk-signature=aa\r\nhello\r\n6;chunk-signature=bb\r\n world\r\n0;chunk-signature=cc\r\n\r\n';
+    const res = await app.request('/s3/team/b.txt', {
+      method: 'PUT',
+      headers: {
+        'x-test-user': 'editor',
+        'Content-Length': String(body.length),
+        'x-amz-content-sha256': 'STREAMING-AWS4-HMAC-SHA256-PAYLOAD',
+        'x-amz-decoded-content-length': '11',
+      },
+      body,
+    }, t.env, t.ctx);
+    vi.unstubAllGlobals();
+
+    expect(res.status).toBe(200);
+    expect(uploaded).toBe('hello world');
+    expect(uploadLength).toBe('11');
+    expect(await t.db.prepare("SELECT size FROM files WHERE name = 'b.txt'").first()).toEqual({ size: 11 });
   });
 });

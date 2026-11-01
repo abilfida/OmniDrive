@@ -4,6 +4,7 @@ import type { AppContext } from '../types/env';
 import { GoogleDriveService } from '../services/google-drive';
 import { generateId } from '../lib/id';
 import { getMD5HashingStream } from '../lib/crypto-s3';
+import { createAwsChunkedDecoder, isAwsChunked } from '../lib/aws-chunked';
 import { UploadRouter } from '../services/upload-router';
 import { mapDriveRow } from '../types';
 import { createHash } from 'node:crypto';
@@ -62,6 +63,22 @@ function xmlError(c: any, code: string, message: string, status: number): Respon
 }
 
 s3Router.use('*', s3AuthMiddleware);
+
+// The object bytes and their length. aws-chunked bodies (the default for
+// current AWS SDKs) are decoded so the chunk framing and checksum trailers
+// don't end up inside the stored object; their real size is in
+// x-amz-decoded-content-length.
+function objectPayload(c: any): { contentLength: number; body: ReadableStream<Uint8Array> | null } {
+  const raw = c.req.raw.body as ReadableStream<Uint8Array> | null;
+  if (!isAwsChunked(c.req.raw.headers)) {
+    return { contentLength: parseInt(c.req.header('Content-Length') || '0', 10), body: raw };
+  }
+  const decodedLength = parseInt(c.req.header('x-amz-decoded-content-length') || '', 10);
+  if (!Number.isFinite(decodedLength)) {
+    throw new AppError(400, 'aws-chunked uploads must send x-amz-decoded-content-length');
+  }
+  return { contentLength: decodedLength, body: raw ? raw.pipeThrough(createAwsChunkedDecoder()) : null };
+}
 
 // Uploading, overwriting and deleting objects changes the workspace, so it
 // needs editor access; listing and reading only need membership.
@@ -410,8 +427,13 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
   );
 
   // Trash/delete file in Google Drive and update SQLite
+  // The object is gone from Drive for good, so drop the row rather than leaving a
+  // trashed entry that could be "restored" in the app, and free workspace quota.
   await driveService.deleteFile(file.drive_account_id, file.google_file_id);
-  await db.prepare('UPDATE files SET is_trashed = 1 WHERE id = ?').bind(file.id).run();
+  await db.batch([
+    db.prepare('DELETE FROM files WHERE id = ?').bind(file.id),
+    db.prepare('UPDATE workspaces SET used_bytes = MAX(0, COALESCE(used_bytes, 0) - ?) WHERE id = ?').bind(file.size || 0, workspace.id),
+  ]);
 
   return c.body(null, 204);
 });
@@ -442,7 +464,7 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   if (!workspace) return c.text('Bucket not found', 404);
   requireWriteAccess(workspace.role);
 
-  const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
+  const { contentLength, body: payloadBody } = objectPayload(c);
   const mimeType = c.req.header('Content-Type') || 'application/octet-stream';
 
   // 1. Select target Drive using UploadRouter
@@ -459,7 +481,7 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const targetDrive = router.selectDriveForUpload(contentLength);
 
   // 2. Hash data on-the-fly to get ETag
-  const bodyStream = c.req.raw.body;
+  const bodyStream = payloadBody;
   if (!bodyStream) return c.text('Empty request body', 400);
 
   const { stream: hashingStream, getHash } = getMD5HashingStream();
@@ -551,8 +573,8 @@ async function handleUploadPart(c: any, uploadId: string, partNumber: number): P
   // Re-checked per part: access may have been revoked since the upload started.
   requireWriteAccess(await getWorkspaceRole(db, upload.workspace_id, userId));
 
-  const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
-  const bodyStream = c.req.raw.body;
+  const { contentLength, body: payloadBody } = objectPayload(c);
+  const bodyStream = payloadBody;
   if (!bodyStream) return c.text('Missing part body', 400);
 
   // Hash part on the fly
