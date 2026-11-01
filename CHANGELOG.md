@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.1] - 2026-11-02
+
+### Fixed
+
+- **Sync on large drives:** Each page of up to 1000 items is written in one batch, so large drives no longer hit per-run limits partway through.
+  - Incremental sync saves its position after every page. A large backlog now keeps advancing across runs instead of starting over.
+  - Deleted folders are removed from listings.
+- **Concurrent and stuck syncs:** The same drive can no longer be synced by two runs at once, from cron, manual sync, folder sync and connecting a drive.
+  - A drive left in "syncing" by an interrupted run is picked up again by the next run.
+- **Google API errors:** Brief Google rate limits and server errors (429/5xx) are retried with backoff instead of failing the whole operation.
+- **Deleting a workspace:** Its files are no longer removed from OmniDrive. They stay as the uploaders' personal files.
+- **Retention policies:** Auto-delete now moves expired files to the Google Drive bin (recoverable for 30 days) instead of only hiding them in OmniDrive.
+  - The expiry date is compared correctly, and one malformed policy no longer stops the others.
+  - Policies with invalid settings are rejected when created.
+- **S3 uploads from current AWS SDKs:** Uploads sent in the default aws-chunked format were stored with the chunk framing inside the file. They are now decoded.
+- **S3 DeleteObject:** Deleting an object removes it from OmniDrive and frees workspace quota, instead of leaving a broken entry in the trash.
+
+### Upgrade notes
+
+- No database migration is needed.
+
 ## [0.11.0] - 2026-11-02
 
 ### Security
