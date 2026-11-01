@@ -16,7 +16,7 @@ describe('registration', () => {
     app.request('/api/auth/register', {
       method: 'POST',
       // A distinct client per request keeps the register rate limit out of the way.
-      headers: { 'Content-Type': 'application/json', Origin: FRONTEND_URL, 'X-Real-IP': `reg-${++ip}` },
+      headers: { 'Content-Type': 'application/json', Origin: FRONTEND_URL, 'CF-Connecting-IP': `reg-${++ip}` },
       body: JSON.stringify({ password: PASSWORD, ...body }),
     }, t.env, t.ctx);
 

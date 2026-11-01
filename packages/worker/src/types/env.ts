@@ -7,6 +7,7 @@ export interface Env {
   WORKER_URL: string;
   JWT_SECRET: string;
   TOKEN_ENCRYPTION_KEY: string;
+  CLIENT_IP?: string; // Node server only: rate-limit key resolved from the socket
 }
 
 export interface SessionData {

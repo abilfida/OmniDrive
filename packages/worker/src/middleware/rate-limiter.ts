@@ -4,18 +4,19 @@ interface RateLimitEntry {
   timestamps: number[];
 }
 
-const store = new Map<string, RateLimitEntry>();
-let lastCleanup = Date.now();
 const CLEANUP_INTERVAL = 5 * 60 * 1000;
 
-function cleanup(windowMs: number) {
-  const now = Date.now();
-  if (now - lastCleanup < CLEANUP_INTERVAL) return;
-  lastCleanup = now;
-  for (const [key, entry] of store) {
-    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
-    if (entry.timestamps.length === 0) store.delete(key);
-  }
+// Every limiter keeps its own buckets and window. A shared store let stacked
+// limiters (e.g. /api/* plus /api/auth/login) count each request twice and
+// let a short window's cleanup trim a longer window's history.
+const allStores = new Set<Map<string, RateLimitEntry>>();
+
+// Address used to rate-limit a request. On Workers, CF-Connecting-IP is set by
+// Cloudflare itself. The Node server passes the socket address (or the one its
+// trusted proxy reported) as the CLIENT_IP binding. X-Real-IP is never trusted:
+// any client can send it and get a fresh bucket on every request.
+export function clientIp(c: any): string {
+  return c.env?.CLIENT_IP ?? c.req.header('CF-Connecting-IP') ?? 'unknown';
 }
 
 interface RateLimitOptions {
@@ -25,16 +26,21 @@ interface RateLimitOptions {
 }
 
 export function rateLimiter(opts: RateLimitOptions) {
+  const store = new Map<string, RateLimitEntry>();
+  allStores.add(store);
+  let lastCleanup = Date.now();
+
   return createMiddleware(async (c, next) => {
-    cleanup(opts.windowMs);
-
-    const key = opts.keyFn
-      ? opts.keyFn(c)
-      : c.req.header('CF-Connecting-IP') ??
-        c.req.header('X-Real-IP') ??
-        'unknown';
-
     const now = Date.now();
+    if (now - lastCleanup >= CLEANUP_INTERVAL) {
+      lastCleanup = now;
+      for (const [key, entry] of store) {
+        entry.timestamps = entry.timestamps.filter((t) => now - t < opts.windowMs);
+        if (entry.timestamps.length === 0) store.delete(key);
+      }
+    }
+
+    const key = opts.keyFn ? opts.keyFn(c) : clientIp(c);
     const entry = store.get(key) ?? { timestamps: [] };
 
     entry.timestamps = entry.timestamps.filter((t) => now - t < opts.windowMs);
@@ -56,5 +62,5 @@ export function rateLimiter(opts: RateLimitOptions) {
 
 /** Only for testing — clears all rate limit state */
 export function _resetStoreForTesting() {
-  store.clear();
+  for (const store of allStores) store.clear();
 }

@@ -11,7 +11,7 @@ import { KVNamespaceWrapper } from './polyfills/kv';
 import { applySchema } from './polyfills/schema';
 import dotenv from 'dotenv';
 import type { Env } from './types/env';
-import { checkNodeEnv } from './lib/node-env';
+import { checkNodeEnv, resolveClientIp } from './lib/node-env';
 
 dotenv.config();
 
@@ -98,8 +98,21 @@ cron.schedule(CRON_SCHEDULE, () => {
 const port = parseInt(process.env.PORT || '8080', 10);
 console.log(`Starting Node server on port ${port}...`);
 
+const trustProxy = process.env.TRUST_PROXY === 'true';
+
 const server = serve({
-  fetch: (req) => app.fetch(req, nodeEnv, dummyCtx),
+  // @hono/node-server passes the raw Node request as `incoming`; its socket
+  // address (not a client-sent header) is what rate limiting keys on.
+  fetch: (req: any, bindings: any) => {
+    const incoming = bindings.incoming as import('http').IncomingMessage;
+    const forwardedFor = incoming.headers['x-forwarded-for'];
+    const clientIp = resolveClientIp(
+      incoming.socket.remoteAddress,
+      Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor,
+      trustProxy
+    );
+    return app.fetch(req, { ...nodeEnv, CLIENT_IP: clientIp }, dummyCtx);
+  },
   port
 });
 

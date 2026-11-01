@@ -34,3 +34,15 @@ export function checkNodeEnv(env: Record<string, string | undefined>): { errors:
 
   return { errors, warnings };
 }
+
+// Client address for rate limiting on the Node server. Forwarding headers are
+// only honoured behind a trusted reverse proxy (TRUST_PROXY=true); the last
+// X-Forwarded-For entry is the one that proxy appended, earlier ones are
+// client-controlled.
+export function resolveClientIp(socketAddress: string | undefined, forwardedFor: string | undefined, trustProxy: boolean): string {
+  if (trustProxy && forwardedFor) {
+    const last = forwardedFor.split(',').map((part) => part.trim()).filter(Boolean).pop();
+    if (last) return last;
+  }
+  return socketAddress || 'unknown';
+}

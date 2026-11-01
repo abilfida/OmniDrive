@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkNodeEnv } from '../src/lib/node-env';
+import { checkNodeEnv, resolveClientIp } from '../src/lib/node-env';
 
 const STRONG = 'a'.repeat(32);
 
@@ -47,5 +47,20 @@ describe('checkNodeEnv', () => {
       FRONTEND_URL: 'https://drive.example.com',
       WORKER_URL: 'https://drive.example.com',
     })).toEqual({ errors: [], warnings: [] });
+  });
+});
+
+describe('resolveClientIp', () => {
+  it('uses the socket address by default and ignores forwarding headers', () => {
+    expect(resolveClientIp('203.0.113.7', '1.2.3.4', false)).toBe('203.0.113.7');
+  });
+
+  it("behind a trusted proxy, uses the address the proxy appended last", () => {
+    expect(resolveClientIp('172.17.0.1', 'spoofed, 198.51.100.4', true)).toBe('198.51.100.4');
+  });
+
+  it('falls back to the socket address when a trusted proxy sent no header', () => {
+    expect(resolveClientIp('172.17.0.1', undefined, true)).toBe('172.17.0.1');
+    expect(resolveClientIp(undefined, undefined, false)).toBe('unknown');
   });
 });

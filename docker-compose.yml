@@ -14,6 +14,8 @@ services:
       - FRONTEND_URL=${FRONTEND_URL}
       - WORKER_URL=${WORKER_URL}
       - DATA_DIR=/app/data
+      # Set to true only when a reverse proxy in front of this container sets X-Forwarded-For
+      - TRUST_PROXY=${TRUST_PROXY:-false}
     volumes:
       - omnidrive-data:/app/data
     restart: unless-stopped
