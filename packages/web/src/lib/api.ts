@@ -47,11 +47,6 @@ export const api = {
   getDrives: () =>
     request<{ drives: import('../types').DriveAccount[]; aggregate: import('../types').AggregateQuota }>('/api/drives/'),
   disconnectDrive: (id: string) => request<{ success: boolean }>(`/api/drives/${id}`, { method: 'DELETE' }),
-  addServiceAccount: (credentials: string, folderId: string) =>
-    request<{ success: boolean; driveId: string }>('/api/drives/service-account', {
-      method: 'POST',
-      body: JSON.stringify({ credentials, folderId }),
-    }),
   triggerSync: (id: string) => request<{ success: boolean }>(`/api/drives/${id}/sync`, { method: 'POST' }),
   getDriveFolderContents: (driveId: string, googleFolderId: string) =>
     request<import('../types').DriveFolderContents>(`/api/drives/${driveId}/folders/${googleFolderId}`),
@@ -93,7 +88,6 @@ export const api = {
     request<{ success: boolean }>(`/api/folders/${id}/force-sync?driveId=${driveId}`, { method: 'POST' }),
 
   // Files
-  getFile: (id: string) => request<import('../types').FileEntry>(`/api/files/${id}`),
   searchFiles: (query: string) =>
     request<{ files: import('../types').FileEntry[]; query: string }>(`/api/files/search?q=${encodeURIComponent(query)}`),
   initiateUpload: (data: { name: string; mimeType: string; size: number } & import('../types').UploadTarget) =>
@@ -112,7 +106,7 @@ export const api = {
       body: JSON.stringify({ workspaceFolderId }),
     }),
   renameFile: (id: string, name: string) =>
-    request<{ success: boolean }>(`/api/files/${id}`, {
+    request<{ success: boolean }>(`/api/files/${id}/rename`, {
       method: 'PATCH',
       body: JSON.stringify({ name }),
     }),

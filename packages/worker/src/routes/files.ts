@@ -218,9 +218,17 @@ filesRouter.delete('/:id', async (c) => {
 filesRouter.patch('/:id/rename', async (c) => {
   const userId = c.get('userId');
   const fileId = c.req.param('id');
-  const { name } = await c.req.json();
-
+  const { name: rawName } = await c.req.json<{ name?: unknown }>();
+  const name = typeof rawName === 'string' ? rawName.trim() : '';
   if (!name) throw new AppError(400, 'Name is required');
+
+  const file = await c.env.DB.prepare('SELECT drive_account_id, google_file_id FROM files WHERE id = ? AND user_id = ?')
+    .bind(fileId, userId).first<{ drive_account_id: string; google_file_id: string }>();
+  if (!file) throw new AppError(404, 'File not found');
+
+  // Rename in Google first; otherwise the next sync would restore the old name.
+  const driveService = new GoogleDriveService(c.env.KV, c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, c.env.TOKEN_ENCRYPTION_KEY);
+  await driveService.renameFile(file.drive_account_id, file.google_file_id, name);
 
   await c.env.DB.prepare('UPDATE files SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
     .bind(name, fileId, userId).run();

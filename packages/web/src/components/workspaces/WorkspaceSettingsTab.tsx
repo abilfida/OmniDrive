@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { parseJsonObject } from '../../lib/utils';
 import type { WorkspacePolicy } from '../../types';
 
 export function WorkspaceSettingsTab({ workspaceId }: { workspaceId: string }) {
@@ -48,7 +49,7 @@ export function WorkspaceSettingsTab({ workspaceId }: { workspaceId: string }) {
   };
 
   const quotaPolicy = policies.find(p => p.policyType === 'storage_quota');
-  const maxBytes = quotaPolicy ? JSON.parse(quotaPolicy.config).max_bytes : null;
+  const maxBytes = quotaPolicy ? parseJsonObject(quotaPolicy.config).max_bytes ?? null : null;
 
   return (
     <div className="p-8 max-w-4xl mx-auto flex flex-col gap-8">
@@ -100,7 +101,7 @@ export function WorkspaceSettingsTab({ workspaceId }: { workspaceId: string }) {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {policies.map(p => {
-              const config = JSON.parse(p.config);
+              const config = parseJsonObject(p.config);
               return (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{p.policyType.replace('_', ' ')}</td>

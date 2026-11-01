@@ -335,6 +335,30 @@ export function mapWorkspaceFolderRow(row: Record<string, unknown>): WorkspaceFo
   };
 }
 
+export interface WorkspacePolicy {
+  id: string;
+  workspaceId: string;
+  targetType: 'workspace' | 'folder';
+  targetId: string | null;
+  policyType: 'storage_quota' | 'data_retention';
+  config: string; // JSON
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function mapWorkspacePolicyRow(row: Record<string, unknown>): WorkspacePolicy {
+  return {
+    id: row.id as string,
+    workspaceId: row.workspace_id as string,
+    targetType: row.target_type as WorkspacePolicy['targetType'],
+    targetId: (row.target_id as string) ?? null,
+    policyType: row.policy_type as WorkspacePolicy['policyType'],
+    config: (row.config as string) ?? '{}',
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
 export interface WorkspaceRow {
   id: string;
   name: string;
