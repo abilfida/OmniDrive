@@ -1,7 +1,22 @@
-node_modules
+**/node_modules
 .git
-.wrangler
-dist
+**/.wrangler
+**/dist
 build
-.env
-.dev.vars
+
+# Secrets and local config
+**/.env
+**/.env.*
+!.env.example
+**/.dev.vars
+
+# The web build must default to same-origin API in Docker images;
+# packages/web/.env.production points at the Cloudflare worker.
+packages/web/.env.production
+
+# Local data and dumps
+**/data
+**/*.sqlite
+**/*.sqlite-*
+**/db_export*.sql
+*.log

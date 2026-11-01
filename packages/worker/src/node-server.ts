@@ -10,8 +10,17 @@ import { D1DatabaseWrapper } from './polyfills/d1';
 import { KVNamespaceWrapper } from './polyfills/kv';
 import dotenv from 'dotenv';
 import type { Env } from './types/env';
+import { checkNodeEnv } from './lib/node-env';
 
 dotenv.config();
+
+const envCheck = checkNodeEnv(process.env);
+for (const warning of envCheck.warnings) console.warn(`[config] WARNING: ${warning}`);
+if (envCheck.errors.length > 0) {
+  for (const error of envCheck.errors) console.error(`[config] ERROR: ${error}`);
+  console.error('[config] Generate secrets with: openssl rand -hex 32');
+  process.exit(1);
+}
 
 const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -50,8 +59,9 @@ const nodeEnv: Env = {
   WORKER_URL: process.env.WORKER_URL || 'http://localhost:8080',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
-  JWT_SECRET: process.env.JWT_SECRET || 'dev-secret',
-  TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || 'dev-encryption-key-32-bytes-long!',
+  // Validated by checkNodeEnv above; used verbatim so existing encrypted data stays readable.
+  JWT_SECRET: process.env.JWT_SECRET!,
+  TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY!,
 };
 
 // Serve static React files from /usr/share/nginx/html or local web/dist

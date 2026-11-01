@@ -14,7 +14,14 @@ wrangler.toml
 # Environment files
 .env*
 !.env.example
-!.env.production
+# Only the web build config (public VITE_* values) is tracked; never secrets
+!packages/web/.env.production
+
+# Local databases and data dumps (may contain user data)
+*.sqlite
+*.sqlite-*
+**/data/
+db_export*.sql
 
 # Local overrides
 *.local
