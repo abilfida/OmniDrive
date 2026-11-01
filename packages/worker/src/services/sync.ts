@@ -33,17 +33,38 @@ export async function syncDriveFolder(_env: Env, _driveId: string, _folderId: st
 // sync_state) so a listing that spans several cron runs resumes with it.
 const startTokenKey = (driveId: string) => `sync:start_token:${driveId}`;
 
+// Cross-isolate sync lock. The status flip in D1 is atomic; the KV lease (with a
+// TTL) tells a live sync apart from one whose worker died mid-run, which would
+// otherwise leave the drive stuck in 'syncing' forever.
+const leaseKey = (driveId: string) => `sync:lease:${driveId}`;
+const LEASE_TTL_SECONDS = 15 * 60; // Cloudflare's cron wall-clock limit
+
+// Changes pages handled per run (1000 changes each). A larger backlog continues
+// on the next run from the saved token instead of exceeding per-invocation limits.
+const MAX_CHANGE_PAGES_PER_RUN = 10;
+
+async function acquireSyncLease(db: D1Database, kv: KVNamespace, driveId: string): Promise<boolean> {
+  await db.prepare("INSERT INTO sync_state (drive_account_id, status) VALUES (?, 'idle') ON CONFLICT(drive_account_id) DO NOTHING")
+    .bind(driveId).run();
+  const claimed = await db.prepare("UPDATE sync_state SET status = 'syncing', error_message = NULL WHERE drive_account_id = ? AND status != 'syncing'")
+    .bind(driveId).run();
+  if (claimed.meta.changes === 0 && (await kv.get(leaseKey(driveId)))) {
+    return false; // another run is syncing this drive right now
+  }
+  await kv.put(leaseKey(driveId), String(Date.now()), { expirationTtl: LEASE_TTL_SECONDS });
+  return true;
+}
+
 export async function syncDriveAccount(
   drive: DriveAccount,
   db: D1Database,
   kv: KVNamespace,
   driveService: GoogleDriveService
 ): Promise<void> {
-  // Update status to syncing
-  await db
-    .prepare("INSERT INTO sync_state (drive_account_id, status) VALUES (?, 'syncing') ON CONFLICT(drive_account_id) DO UPDATE SET status = 'syncing', error_message = NULL")
-    .bind(drive.id)
-    .run();
+  if (!(await acquireSyncLease(db, kv, drive.id))) {
+    console.log(`Skipping sync for ${drive.email}: already syncing`);
+    return;
+  }
 
   try {
     const syncState = await db
@@ -92,6 +113,8 @@ export async function syncDriveAccount(
       .prepare("INSERT INTO sync_state (drive_account_id, status, error_message) VALUES (?, 'error', ?) ON CONFLICT(drive_account_id) DO UPDATE SET status = 'error', error_message = excluded.error_message")
       .bind(drive.id, message)
       .run();
+  } finally {
+    await kv.delete(leaseKey(drive.id));
   }
 }
 
@@ -112,15 +135,12 @@ async function performInitialSync(
       return false;
     }
 
-    for (const folder of chunk.folders) {
-      const parentId = resolveParentId(folder.parents, rootFolderId, true);
-      await upsertDriveFolder(db, drive, folder, parentId);
-    }
-
-    for (const file of chunk.files) {
-      const parentId = resolveParentId(file.parents, rootFolderId, false);
-      await upsertFile(db, drive, file, parentId);
-    }
+    // One batch per page instead of one round trip per item.
+    const statements = [
+      ...chunk.folders.map((folder) => upsertDriveFolder(db, drive, folder, resolveParentId(folder.parents, rootFolderId, true))),
+      ...chunk.files.map((file) => upsertFile(db, drive, file, resolveParentId(file.parents, rootFolderId, false))),
+    ];
+    if (statements.length > 0) await db.batch(statements);
 
     // Save checkpoint
     if (chunk.nextPageToken) {
@@ -144,67 +164,55 @@ async function performIncrementalSync(
   const rootFolderId = await driveService.getRootFolderId(drive.id);
 
   let currentToken = pageToken;
-  let hasMore = true;
 
-  while (hasMore) {
+  for (let page = 0; page < MAX_CHANGE_PAGES_PER_RUN; page++) {
     if (getIsShuttingDown()) return currentToken;
     const response = await driveService.listChanges(drive.id, currentToken);
+    const statements: D1PreparedStatement[] = [];
 
     for (const change of response.changes) {
-      if (getIsShuttingDown()) return currentToken;
-      const isFolder = change.file?.mimeType === MIME_TYPE_FOLDER;
-
       if (change.removed || change.file?.trashed) {
-        if (isFolder) {
-          await db
-            .prepare('DELETE FROM drive_folders WHERE drive_account_id = ? AND google_folder_id = ?')
-            .bind(drive.id, change.fileId)
-            .run();
-        } else {
-          await db
-            .prepare('DELETE FROM files WHERE drive_account_id = ? AND google_file_id = ?')
-            .bind(drive.id, change.fileId)
-            .run();
-        }
+        // Removals carry no file details, so the item may be a file or a folder.
+        statements.push(
+          db.prepare('DELETE FROM drive_folders WHERE drive_account_id = ? AND google_folder_id = ?').bind(drive.id, change.fileId),
+          db.prepare('DELETE FROM files WHERE drive_account_id = ? AND google_file_id = ?').bind(drive.id, change.fileId)
+        );
         continue;
       }
 
       const file = change.file;
-      if (!file) continue;
+      if (!file || file.mimeType === MIME_TYPE_SHORTCUT) continue;
 
-      if (file.mimeType === MIME_TYPE_SHORTCUT) continue;
-
-      if (isFolder) {
-        const parentId = resolveParentId(file.parents, rootFolderId, true);
-        await upsertDriveFolder(db, drive, { id: file.id, name: file.name, parents: file.parents }, parentId);
+      if (file.mimeType === MIME_TYPE_FOLDER) {
+        statements.push(upsertDriveFolder(db, drive, { id: file.id, name: file.name, parents: file.parents }, resolveParentId(file.parents, rootFolderId, true)));
       } else {
-        const parentId = resolveParentId(file.parents, rootFolderId, false);
-        await upsertFile(db, drive, file as unknown as GDriveFile, parentId);
+        statements.push(upsertFile(db, drive, file as unknown as GDriveFile, resolveParentId(file.parents, rootFolderId, false)));
       }
     }
 
-    if (response.newStartPageToken) {
-      return response.newStartPageToken;
+    const nextToken = response.newStartPageToken ?? response.nextPageToken;
+    // Apply the page and advance the saved token together, so a later failure
+    // resumes after this page instead of replaying the whole backlog.
+    if (nextToken) {
+      statements.push(db.prepare('UPDATE sync_state SET change_token = ? WHERE drive_account_id = ?').bind(nextToken, drive.id));
     }
+    if (statements.length > 0) await db.batch(statements);
 
-    if (response.nextPageToken) {
-      currentToken = response.nextPageToken;
-    } else {
-      hasMore = false;
-    }
+    if (response.newStartPageToken || !response.nextPageToken) return nextToken ?? currentToken;
+    currentToken = response.nextPageToken;
   }
 
   return currentToken;
 }
 
-async function upsertDriveFolder(
+function upsertDriveFolder(
   db: D1Database,
   drive: DriveAccount,
   folder: GDriveFolder,
   googleParentId: string | null
-): Promise<void> {
+): D1PreparedStatement {
   const folderId = generateId();
-  await db
+  return db
     .prepare(
       `INSERT INTO drive_folders (id, drive_account_id, google_folder_id, google_parent_id, name, is_synced)
        VALUES (?, ?, ?, ?, ?, 0)
@@ -212,18 +220,17 @@ async function upsertDriveFolder(
          name = excluded.name,
          google_parent_id = excluded.google_parent_id`
     )
-    .bind(folderId, drive.id, folder.id, googleParentId, folder.name)
-    .run();
+    .bind(folderId, drive.id, folder.id, googleParentId, folder.name);
 }
 
-async function upsertFile(
+function upsertFile(
   db: D1Database,
   drive: DriveAccount,
   file: GDriveFile,
   googleParentId: string | null
-): Promise<void> {
+): D1PreparedStatement {
   const fileId = generateId();
-  await db
+  return db
     .prepare(
       `INSERT INTO files
          (id, user_id, drive_account_id, google_file_id, google_parent_id, name, mime_type, size,
@@ -254,8 +261,7 @@ async function upsertFile(
       file.webContentLink ?? null,
       file.createdTime,
       file.modifiedTime
-    )
-    .run();
+    );
 }
 
 export async function runScheduledSync(env: {
