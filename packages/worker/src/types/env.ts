@@ -17,6 +17,7 @@ export interface SessionData {
   avatarUrl?: string | null;
   role: 'super_admin' | 'member';
   createdAt: number;
+  refreshedAt?: number; // last time the sliding TTL was extended
 }
 
 export type AppContext = {

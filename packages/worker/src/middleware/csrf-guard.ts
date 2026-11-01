@@ -4,9 +4,13 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
 const CSRF_EXEMPT_PATHS = [
   '/api/auth/google/callback',
-  '/api/auth/login',
-  '/api/auth/register',
 ];
+
+// Login and register carry no session yet, so non-browser clients (no Origin or
+// Referer) may call them. A browser always sends Origin on a cross-site POST,
+// so a foreign Origin/Referer is still rejected: otherwise a page could log the
+// victim into an attacker's account (login CSRF) and capture their Drive tokens.
+const PRE_SESSION_PATHS = ['/api/auth/login', '/api/auth/register'];
 
 function isPublicSharedEndpoint(method: string, path: string): boolean {
   const sharedMatch = path.match(/^\/api\/shared\/[^/]+/);
@@ -34,6 +38,9 @@ export const csrfGuard = createMiddleware<{
   const allowedOrigins = [c.env.FRONTEND_URL, c.env.WORKER_URL].filter(Boolean);
 
   const origin = c.req.header('Origin');
+  if (!origin && !c.req.header('Referer') && PRE_SESSION_PATHS.some((p) => path.startsWith(p))) {
+    return next();
+  }
   if (origin) {
     if (!allowedOrigins.includes(origin)) {
       return c.json({ error: 'CSRF validation failed' }, 403);
