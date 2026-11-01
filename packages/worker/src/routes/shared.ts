@@ -8,6 +8,7 @@ import { mapSharedLinkRow, type SharedLink } from '../types';
 import { generateId } from '../lib/id';
 import { GoogleDriveService } from '../services/google-drive';
 import { validateWebhookUrl } from '../lib/validation';
+import { getWorkspaceRole, hasPermission } from '../middleware/rbac';
 
 
 export const sharedRouter = new Hono<AppContext>({ strict: false });
@@ -65,13 +66,16 @@ sharedRouter.post('/', authGuard, async (c) => {
 
   const db = c.env.DB;
 
-  // Verify ownership of target
+  // Verify the caller may publish the target
   if (targetType === 'file') {
     const file = await db.prepare('SELECT id FROM files WHERE id = ? AND user_id = ?').bind(targetId, userId).first();
     if (!file) return c.json({ error: 'You do not own this file' }, 403);
   } else if (targetType === 'folder') {
-    const folder = await db.prepare('SELECT id FROM workspace_folders WHERE id = ?').bind(targetId).first();
-    if (!folder) return c.json({ error: 'You do not own this folder' }, 403);
+    const folder = await db.prepare('SELECT workspace_id FROM workspace_folders WHERE id = ?').bind(targetId).first<{ workspace_id: string }>();
+    const role = folder ? await getWorkspaceRole(db, folder.workspace_id, userId) : null;
+    if (!role || !hasPermission(role, 'editor')) return c.json({ error: 'You cannot share this folder' }, 403);
+  } else {
+    return c.json({ error: "targetType must be 'file' or 'folder'" }, 400);
   }
 
   // Validate webhook URL if provided
@@ -285,12 +289,18 @@ sharedRouter.get('/:id/meta', async (c) => {
     db.prepare('INSERT INTO shared_link_logs (shared_link_id, action) VALUES (?, ?)').bind(id, 'view').run()
   );
 
+  // Public endpoint: return only what the share page renders, never internal ids.
   if (link.targetType === 'file') {
-    const file = await db.prepare('SELECT * FROM files WHERE id = ?').bind(link.targetId).first();
+    const file = await db.prepare('SELECT name, mime_type, size FROM files WHERE id = ?')
+      .bind(link.targetId).first<{ name: string; mime_type: string; size: number }>();
     if (!file) return c.json({ error: 'File not found' }, 404);
-    return c.json({ target: file, type: 'file' });
+    return c.json({
+      type: 'file',
+      target: { name: file.name, mimeType: file.mime_type, size: file.size },
+      allowDownloads: link.allowDownloads,
+    });
   } else {
-    return c.json({ targetId: link.targetId, type: 'folder' });
+    return c.json({ type: 'folder', allowDownloads: link.allowDownloads });
   }
 });
 

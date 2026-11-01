@@ -216,8 +216,8 @@ export interface SharedLink {
 
 export interface SharedMetaResponse {
   type?: 'file' | 'folder';
-  target?: import('../types').FileEntry;
-  targetId?: string;
+  target?: { name: string; mimeType: string; size: number };
+  allowDownloads?: boolean;
   requiresPassword?: boolean;
 }
 
