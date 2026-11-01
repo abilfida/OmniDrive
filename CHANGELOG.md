@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-11-02
+
+### Security
+
+- **Workspace folder authorization:** Folder and workspace routes did not check membership, so any signed-in user could list, rename, move, star or delete another workspace's folders, rename or delete workspaces, and add files to them. Every route now requires a workspace role (viewer to read, editor to write, manager to rename a workspace, owner to delete it); non-members get 404.
+- **S3 write access:** Uploading, overwriting and deleting objects through the S3 API now requires editor access. Viewers could previously delete files, including ones stored in other members' Drives.
+- **Registration races:** Two simultaneous sign-ups on a fresh install can no longer both become super admin. Invitation codes are claimed atomically and are no longer used up by rejected registrations.
+- **Share links:** Public share metadata no longer exposes internal ids. Sharing a folder requires editor access to its workspace, and unknown target types are rejected.
+- **Drive disconnect:** Disconnecting a drive only removes tokens for drives the caller owns.
+- **Login CSRF:** Login and registration reject requests from foreign origins.
+- **Rate limiting:** `X-Real-IP` is no longer trusted. The self-hosted server rate-limits by socket address, or by the reverse proxy's `X-Forwarded-For` with `TRUST_PROXY=true`. Each limiter now has its own buckets; login was locking out after 5 attempts instead of 10.
+- API request bodies are limited to 1 MB.
+
+### Fixed
+
+- **Web uploads:** Uploads failed at the first step. The selected drive and folder are now used, uploaded files appear in folder listings, and finishing an upload no longer fails when a sync already picked the file up. The upload dialog reports failed files instead of always saying the upload completed.
+- **Rename:** Renaming files from the web app works again, and the new name is applied in Google Drive so the next sync no longer reverts it.
+- **Workspace settings:** The settings tab no longer crashes the app once a storage or retention policy exists.
+- **Self-hosted (Docker):** Creating workspaces, automations, restoring, starring files and editing share links no longer return 500. S3 uploads work on Node 22. Databases created by older releases now gain any missing columns on startup.
+- **Sync:** Changes made in Google Drive while the first full sync of a drive was running are no longer lost.
+- **CORS:** Folder renames and share-link edits work when the web app and API are on different domains.
+- The public share page shows the correct file icon and hides Download when the owner disabled downloads.
+
+### Changed
+
+- Viewers can no longer star folders. Renaming a workspace requires manager access and deleting it requires owner access.
+- The session is extended at most once a day instead of being written back to storage on every request.
+- Removed the "Add Service Account" option, which had no working backend.
+- Added CI that runs tests and builds, including the Docker image, on every push and pull request.
+
+### Upgrade notes
+
+- **Docker behind a reverse proxy** (nginx, Caddy, Traefik): set `TRUST_PROXY=true`, otherwise all clients share the proxy's rate-limit bucket. Do not set it when the container is exposed directly.
+- No database migration is needed on Cloudflare D1. Self-hosted databases are upgraded automatically on startup.
+
 ## [0.10.0] - 2026-11-01
 
 ### Security
