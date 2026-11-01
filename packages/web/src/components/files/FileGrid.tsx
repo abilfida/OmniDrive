@@ -3,7 +3,6 @@ import type { FileEntry, DriveFolder, WorkspaceFolder } from '../../types';
 import { formatFileSize, formatRelativeTime, getDriveColor } from '../../lib/utils';
 import { FileIcon } from './FileIcon';
 import { Folder, Download, Trash2, Pencil, ExternalLink, Share2, RefreshCw, Eye, Star, Info } from 'lucide-react';
-import { api } from '../../lib/api';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -220,7 +219,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
   const { selectedItems, toggleSelection, selectMultiple, selectAll, clearSelection } = useSelectionStore();
   const hasSelection = selectedItems.length > 0;
   const selectedKeys = new Set(selectedItems.map(i => i.item.id || ('googleFolderId' in i.item ? i.item.googleFolderId : undefined)));
-  const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleItemClick = (e: React.MouseEvent, item: SelectedItem) => {
     e.stopPropagation();
@@ -311,19 +309,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       onNavigateFolder?.(folder.googleFolderId, driveAccountId);
                     }
                   }}
-                  onMouseEnter={() => {
-                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                    hoverTimeoutRef.current = setTimeout(() => {
-                      if (isVirtual) {
-                        api.getFolderContents(folder.id).catch(() => {});
-                      } else if (driveAccountId && 'googleFolderId' in folder) {
-                        api.getDriveFolderContents(driveAccountId, folder.googleFolderId).catch(() => {});
-                      }
-                    }, 300);
-                  }}
-                  onMouseLeave={() => {
-                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                  }}
                   className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 group ${
                     isSelected
                       ? 'bg-blue-100 hover:bg-blue-200'
@@ -394,15 +379,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       return;
                     }
                     onPreviewFile?.(file);
-                  }}
-                  onMouseEnter={() => {
-                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                    hoverTimeoutRef.current = setTimeout(() => {
-                      api.getFile(file.id).catch(() => {});
-                    }, 300);
-                  }}
-                  onMouseLeave={() => {
-                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                   }}
                   className={`grid grid-cols-[auto_1fr_120px_140px_44px] gap-0 items-center px-4 py-2.5 cursor-pointer transition-colors border-b border-gray-50 group ${
                     isSelected
@@ -493,19 +469,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
                       onNavigateFolder?.(folder.googleFolderId, driveAccountId);
                     }
                 }}
-                onMouseEnter={() => {
-                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                  hoverTimeoutRef.current = setTimeout(() => {
-                    if (isVirtual) {
-                      api.getFolderContents(folder.id).catch(() => {});
-                    } else if (driveAccountId && 'googleFolderId' in folder) {
-                      api.getDriveFolderContents(driveAccountId, folder.googleFolderId).catch(() => {});
-                    }
-                  }, 300);
-                }}
-                onMouseLeave={() => {
-                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                }}
                 className={`p-3 border rounded-xl cursor-pointer flex items-center gap-4 transition-all group relative ${
                     isSelected
                     ? 'bg-blue-100 border-blue-300'
@@ -571,15 +534,6 @@ export const FileGrid: React.FC<FileGridProps> = ({
                     return;
                   }
                   onPreviewFile?.(file);
-                }}
-                onMouseEnter={() => {
-                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                  hoverTimeoutRef.current = setTimeout(() => {
-                    api.getFile(file.id).catch(() => {});
-                  }, 300);
-                }}
-                onMouseLeave={() => {
-                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                 }}
                 className={`p-3 border rounded-xl cursor-pointer flex flex-col justify-between h-36 transition-all group relative ${
                   isSelected

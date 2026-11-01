@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSelectionStore } from '../../stores/useSelectionStore';
-import { formatFileSize, formatRelativeTime } from '../../lib/utils';
+import { formatFileSize, formatRelativeTime, parseJsonObject } from '../../lib/utils';
 import { FileIcon } from '../files/FileIcon';
 import { X, File, Folder, Loader2, RefreshCw } from 'lucide-react';
 import { useUIStore } from '../../stores/useUIStore';
@@ -145,7 +145,7 @@ export const InfoPanel: React.FC = () => {
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tags & Metadata</h4>
           {('metadata' in item && item.metadata) ? (
             <div className="flex flex-wrap gap-2 mb-3">
-              {Object.entries(typeof (item as any).metadata === 'string' ? JSON.parse((item as any).metadata) : (item as any).metadata).map(([k, v]) => (
+              {Object.entries(typeof (item as any).metadata === 'string' ? parseJsonObject((item as any).metadata) : (item as any).metadata).map(([k, v]) => (
                 <div key={k} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
                   <span className="font-semibold mr-1">{k}:</span> {v as string}
                 </div>
@@ -163,7 +163,7 @@ export const InfoPanel: React.FC = () => {
               if (!key || !value) return;
 
               const { api } = await import('../../lib/api');
-              const currentMeta = typeof (item as any).metadata === 'string' ? JSON.parse((item as any).metadata || '{}') : ((item as any).metadata || {});
+              const currentMeta = typeof (item as any).metadata === 'string' ? parseJsonObject((item as any).metadata) : ((item as any).metadata || {});
               const newMeta = { ...currentMeta, [key]: value };
 
               try {

@@ -46,3 +46,14 @@ export function getQuotaLevel(percent: number): 'normal' | 'warning' | 'danger' 
   if (percent >= 75) return 'warning';
   return 'normal';
 }
+
+// Parses JSON stored in the database without letting a malformed value crash a render.
+export function parseJsonObject(value: string | null | undefined): Record<string, any> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}

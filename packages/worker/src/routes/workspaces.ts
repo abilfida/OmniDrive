@@ -4,6 +4,7 @@ import { authGuard } from '../middleware/auth-guard';
 import { generateId } from '../lib/id';
 import { getWorkspaceRole, hasPermission } from '../middleware/rbac';
 import { AuditService } from '../services/audit.service';
+import { mapWorkspacePolicyRow } from '../types';
 
 export const workspacesRouter = new Hono<AppContext>({ strict: false });
 
@@ -165,7 +166,7 @@ workspacesRouter.get('/:id/policies', async (c) => {
     'SELECT * FROM workspace_policies WHERE workspace_id = ?'
   ).bind(workspaceId).all();
 
-  return c.json({ policies: results });
+  return c.json({ policies: results.map(mapWorkspacePolicyRow) });
 });
 
 workspacesRouter.post('/:id/policies', async (c) => {
@@ -202,7 +203,7 @@ workspacesRouter.post('/:id/policies', async (c) => {
 
   const policy = await db.prepare('SELECT * FROM workspace_policies WHERE id = ?').bind(policyId).first();
 
-  return c.json({ policy }, 201);
+  return c.json({ policy: mapWorkspacePolicyRow(policy!) }, 201);
 });
 
 workspacesRouter.delete('/:id/policies/:policyId', async (c) => {
