@@ -43,6 +43,30 @@ export class GoogleDriveService {
     this.encryptionKey = encryptionKey;
   }
 
+  // Base delay for retries; tests shorten it.
+  static retryBaseDelayMs = 500;
+
+  // Google returns 429 for rate limits and 5xx for transient backend errors.
+  // Retried with exponential backoff (honouring Retry-After), so a brief blip
+  // no longer fails a whole sync run or user request. Only used for requests
+  // that are safe to repeat.
+  private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+    const maxAttempts = 4;
+    for (let attempt = 1; ; attempt++) {
+      const response = await fetch(url, init);
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt >= maxAttempts) return response;
+
+      const retryAfterSeconds = Number(response.headers.get('Retry-After'));
+      const backoff = GoogleDriveService.retryBaseDelayMs * 2 ** (attempt - 1);
+      const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? Math.min(retryAfterSeconds * 1000, 30_000)
+        : backoff;
+      await response.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
   // ─── Token Management ───
 
   async getValidToken(driveAccountId: string): Promise<string> {
@@ -74,7 +98,7 @@ export class GoogleDriveService {
   }
 
   private async refreshToken(driveAccountId: string, refreshToken: string): Promise<string> {
-    const response = await fetch(TOKEN_URL, {
+    const response = await this.fetchWithRetry(TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -124,7 +148,7 @@ export class GoogleDriveService {
 
     // Fetch from Google Drive API
     const token = await this.getValidToken(driveAccountId);
-    const response = await fetch(`${DRIVE_API}/about?fields=storageQuota`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/about?fields=storageQuota`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -153,7 +177,7 @@ export class GoogleDriveService {
 
   async getRootFolderId(driveAccountId: string): Promise<string> {
     const token = await this.getValidToken(driveAccountId);
-    const response = await fetch(`${DRIVE_API}/files/root?fields=id`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/root?fields=id`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) {
@@ -214,7 +238,7 @@ export class GoogleDriveService {
     };
     if (browserOrigin) headers.Origin = browserOrigin;
 
-    const response = await fetch(
+    const response = await this.fetchWithRetry(
       `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`,
       {
         method: 'POST',
@@ -247,7 +271,7 @@ export class GoogleDriveService {
     const token = await this.getValidToken(driveAccountId);
     const fields = 'id,name,mimeType,size,parents,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum';
 
-    const response = await fetch(`${DRIVE_API}/files/${googleFileId}?fields=${fields}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${googleFileId}?fields=${fields}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -284,7 +308,7 @@ export class GoogleDriveService {
       url = `${DRIVE_API}/files/${googleFileId}/export?mimeType=${exportedMimeType}`;
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithRetry(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -305,7 +329,7 @@ export class GoogleDriveService {
   async deleteFile(driveAccountId: string, googleFileId: string): Promise<void> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/files/${googleFileId}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${googleFileId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -318,7 +342,7 @@ export class GoogleDriveService {
   async renameFile(driveAccountId: string, googleFileId: string, newName: string): Promise<void> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/files/${googleFileId}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${googleFileId}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -360,7 +384,7 @@ export class GoogleDriveService {
   async revokeShare(driveAccountId: string, fileId: string, permissionId: string): Promise<void> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/files/${fileId}/permissions/${permissionId}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${fileId}/permissions/${permissionId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -395,7 +419,7 @@ export class GoogleDriveService {
   async trashFile(driveAccountId: string, fileId: string): Promise<void> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/files/${fileId}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${fileId}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -415,7 +439,7 @@ export class GoogleDriveService {
   async untrashFile(driveAccountId: string, fileId: string): Promise<void> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/files/${fileId}`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/files/${fileId}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -437,7 +461,7 @@ export class GoogleDriveService {
   async getStartPageToken(driveAccountId: string): Promise<string> {
     const token = await this.getValidToken(driveAccountId);
 
-    const response = await fetch(`${DRIVE_API}/changes/startPageToken`, {
+    const response = await this.fetchWithRetry(`${DRIVE_API}/changes/startPageToken`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -477,8 +501,8 @@ export class GoogleDriveService {
     const fields =
       'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,size,parents,trashed,thumbnailLink,webViewLink,webContentLink,createdTime,modifiedTime,md5Checksum))';
 
-    const response = await fetch(
-      `${DRIVE_API}/changes?pageToken=${encodeURIComponent(pageToken)}&fields=${fields}&spaces=drive&includeRemoved=true`,
+    const response = await this.fetchWithRetry(
+      `${DRIVE_API}/changes?pageToken=${encodeURIComponent(pageToken)}&fields=${fields}&spaces=drive&includeRemoved=true&pageSize=1000`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -514,7 +538,7 @@ export class GoogleDriveService {
 
     do {
       const url = `${DRIVE_API}/files?q=${q}&fields=nextPageToken,${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-      const response = await fetch(url, {
+      const response = await this.fetchWithRetry(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -546,8 +570,8 @@ export class GoogleDriveService {
     let pageToken: string | undefined;
 
     do {
-      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-      const response = await fetch(url, {
+      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}&pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const response = await this.fetchWithRetry(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -587,8 +611,8 @@ export class GoogleDriveService {
     let pageToken: string | undefined;
 
     do {
-      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-      const response = await fetch(url, {
+      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}&pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const response = await this.fetchWithRetry(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -624,8 +648,8 @@ export class GoogleDriveService {
     let pageToken: string | undefined = startPageToken;
 
     do {
-      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-      const response = await fetch(url, {
+      const url = `${DRIVE_API}/files?q=${q}&fields=${fields}&pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const response = await this.fetchWithRetry(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
