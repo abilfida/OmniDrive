@@ -32,9 +32,15 @@ COPY --from=builder /app/packages/worker/src/db/schema.sql ./src/db/schema.sql
 # Copy built static frontend
 COPY --from=builder /app/packages/web/dist ./web/dist
 
-# Install only better-sqlite3 for the runner (it contains native bindings)
-# esbuild bundles everything else, but native modules must be installed
-RUN npm init -y && npm install better-sqlite3
+# esbuild bundles everything except better-sqlite3 (native bindings). Copy the
+# exact build from the builder (pinned by package-lock.json, same base image)
+# instead of downloading whatever version is latest at image build time.
+COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+COPY --from=builder /app/node_modules/bindings ./node_modules/bindings
+COPY --from=builder /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
+
+COPY docker/entrypoint.sh /usr/local/bin/omnidrive-entrypoint
+RUN mkdir -p /app/data && chown node:node /app/data
 
 ENV NODE_ENV=production
 ENV STATIC_DIR=./web/dist
@@ -42,4 +48,9 @@ ENV DATA_DIR=/app/data
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+
+# Starts as root only to fix data-volume ownership, then runs as "node".
+ENTRYPOINT ["omnidrive-entrypoint"]
 CMD ["node", "node-server.cjs"]

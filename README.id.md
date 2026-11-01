@@ -198,8 +198,22 @@ Salin `/.env.example` menjadi `/.env` dan isi dengan nilai yang sesuai. File ini
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret | |
 | `JWT_SECRET` | Kunci khusus penanda tangan JWT (minimal 32 karakter) | |
 | `TOKEN_ENCRYPTION_KEY` | Kunci enkripsi token OAuth saat istirahat (32 karakter) | |
+| `TRUST_PROXY` | Khusus Docker: set `true` jika ada reverse proxy di depan yang mengisi `X-Forwarded-For` (untuk rate limiting) | `false` |
 
 *Catatan: Untuk production di Cloudflare, secrets backend harus diset via `wrangler secret put`, dan variabel biasa di `wrangler.toml` bagian `[vars]`. Frontend menggunakan `packages/web/.env.production`.*
+
+## Backup (Docker / self-hosted)
+
+Seluruh metadata disimpan di dua file SQLite di volume `omnidrive-data`. Database berjalan dalam mode WAL, jadi selama container berjalan salin dengan backup API SQLite, bukan `cp`:
+
+```bash
+docker compose exec omnidrive node -e "const D=require('better-sqlite3');const s=new Date().toISOString().replace(/[:.]/g,'-');Promise.all(['omnidrive','kv'].map(n=>new D('/app/data/'+n+'.sqlite',{readonly:true}).backup('/app/data/backup-'+n+'-'+s+'.sqlite'))).then(()=>console.log('backup written to /app/data'))"
+docker compose cp omnidrive:/app/data ./omnidrive-backup
+```
+
+Backup juga file `.env` Anda dan simpan dengan aman. Token Google Drive dan key S3 dienkripsi dengan `TOKEN_ENCRYPTION_KEY`. Database yang dipulihkan tanpa key yang sama tidak bisa dipakai, dan key ini tidak boleh diganti pada instalasi yang sudah ada.
+
+Untuk restore, hentikan container, letakkan file backup di volume sebagai `omnidrive.sqlite` dan `kv.sqlite`, hapus file `-wal`/`-shm` di sebelahnya, lalu jalankan lagi.
 
 ## Lisensi
 

@@ -1,17 +1,35 @@
 import Database from 'better-sqlite3';
+import { configureConnection } from './d1';
 
 export class KVNamespaceWrapper {
   private db: Database.Database;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
+    configureConnection(this.db);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS kv_store (
         id TEXT PRIMARY KEY,
         value TEXT NOT NULL,
         expiration INTEGER
-      )
+      );
+      CREATE INDEX IF NOT EXISTS idx_kv_store_expiration ON kv_store(expiration);
     `);
+  }
+
+  // Expired keys are otherwise only removed when they are read again, so
+  // sessions and OAuth states that are never revisited would pile up forever.
+  purgeExpired(): number {
+    return this.db.prepare('DELETE FROM kv_store WHERE expiration IS NOT NULL AND expiration < ?')
+      .run(Math.floor(Date.now() / 1000)).changes;
+  }
+
+  pragma(name: string) {
+    return this.db.pragma(name, { simple: true });
+  }
+
+  close() {
+    this.db.close();
   }
 
   async get(key: string): Promise<string | null> {
