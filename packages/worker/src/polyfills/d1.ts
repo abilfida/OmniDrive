@@ -13,6 +13,14 @@ export interface D1Result<T = any> {
   meta: D1ResultMeta;
 }
 
+// WAL lets reads continue while a write is in progress (the cron sync writes
+// while users browse), and busy_timeout makes a writer wait for a lock instead
+// of failing at once with SQLITE_BUSY.
+export function configureConnection(db: Database.Database) {
+  db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
+}
+
 // D1 stores booleans as 1/0; better-sqlite3 rejects them.
 function toSqliteValue(value: any) {
   return typeof value === 'boolean' ? (value ? 1 : 0) : value;
@@ -85,10 +93,19 @@ export class D1DatabaseWrapper {
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
+    configureConnection(this.db);
   }
 
   prepare(query: string) {
     return new D1PreparedStatementWrapper(this.db, query);
+  }
+
+  pragma(name: string) {
+    return this.db.pragma(name, { simple: true });
+  }
+
+  close() {
+    this.db.close();
   }
 
   // Like D1, a batch is atomic: any failing statement rolls back the whole batch.

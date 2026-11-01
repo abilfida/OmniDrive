@@ -197,8 +197,22 @@ Copy `/.env.example` to `/.env` and fill in your values. This file is automatica
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret | |
 | `JWT_SECRET` | JWT signing key for shared links (min 32 chars) | |
 | `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for encrypting OAuth tokens (32 chars)| |
+| `TRUST_PROXY` | Docker only: set to `true` when a reverse proxy in front sets `X-Forwarded-For` (used for rate limiting) | `false` |
 
 *Note: For production on Cloudflare, backend secrets should be set via `wrangler secret put`, and non-secrets in `wrangler.toml` under `[vars]`. The frontend uses `packages/web/.env.production`.*
+
+## Backups (Docker / self-hosted)
+
+All metadata lives in two SQLite files in the `omnidrive-data` volume. The databases run in WAL mode, so copy them with SQLite's backup API rather than `cp` while the container is running:
+
+```bash
+docker compose exec omnidrive node -e "const D=require('better-sqlite3');const s=new Date().toISOString().replace(/[:.]/g,'-');Promise.all(['omnidrive','kv'].map(n=>new D('/app/data/'+n+'.sqlite',{readonly:true}).backup('/app/data/backup-'+n+'-'+s+'.sqlite'))).then(()=>console.log('backup written to /app/data'))"
+docker compose cp omnidrive:/app/data ./omnidrive-backup
+```
+
+Back up your `.env` as well and keep it safe. Google Drive tokens and S3 keys are encrypted with `TOKEN_ENCRYPTION_KEY`. A database restored without the matching key is unusable, and the key must never be changed on an existing installation.
+
+To restore, stop the container, put the backup files in the volume as `omnidrive.sqlite` and `kv.sqlite`, delete any `-wal`/`-shm` files next to them, and start it again.
 
 ## License
 

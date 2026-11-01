@@ -88,10 +88,12 @@ const dummyCtx = {
 
 // Setup Cron Schedule
 const CRON_SCHEDULE = '*/30 * * * *';
-cron.schedule(CRON_SCHEDULE, () => {
+const cronTask = cron.schedule(CRON_SCHEDULE, () => {
   console.log('Executing cron schedule...');
+  const purged = kv.purgeExpired();
+  if (purged > 0) console.log(`Purged ${purged} expired KV entries`);
   if (worker.scheduled) {
-    worker.scheduled({ cron: CRON_SCHEDULE, type: 'cron', scheduledTime: Date.now() }, nodeEnv, dummyCtx);
+    worker.scheduled({ cron: CRON_SCHEDULE, type: 'cron', scheduledTime: Date.now() } as any, nodeEnv, dummyCtx);
   }
 });
 
@@ -116,13 +118,34 @@ const server = serve({
   port
 });
 
+// Docker sends SIGKILL 10 s after SIGTERM, so finish before that.
+const SHUTDOWN_TIMEOUT_MS = 8000;
+
 function shutdown(signal: string) {
   console.log(`${signal} received. Initiating graceful shutdown...`);
   setShuttingDown();
+  cronTask.stop();
+
+  const closeDatabases = () => {
+    // Closing checkpoints the WAL into the main database file.
+    try { d1.close(); } catch (err) { console.error('Failed to close database:', err); }
+    try { kv.close(); } catch (err) { console.error('Failed to close KV store:', err); }
+  };
+
+  // Long downloads can hold connections open; don't wait for them forever.
+  setTimeout(() => {
+    console.warn('Shutdown timed out; closing open connections.');
+    closeDatabases();
+    process.exit(0);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+
   server.close(() => {
     console.log('HTTP server closed. Exiting process.');
+    closeDatabases();
     process.exit(0);
   });
+  // Idle keep-alive connections would otherwise hold close() open.
+  (server as any).closeIdleConnections?.();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
