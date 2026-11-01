@@ -1,7 +1,0 @@
-HTTP/1.1 400 Bad Request
-Content-Length: 35
-Content-Type: application/json
-Vary: Origin
-Access-Control-Allow-Credentials: true
-
-{"error":"Username already exists"}

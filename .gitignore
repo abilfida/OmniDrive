@@ -36,3 +36,8 @@ Thumbs.db
 
 # Internal Documentation
 docs/
+
+# Scratch output that kept ending up in commits
+*.patch
+diff*.txt
+curl_out*.txt
