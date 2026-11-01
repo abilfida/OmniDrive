@@ -341,7 +341,13 @@ foldersRouter.delete('/:id', async (c) => {
   const target = await authorizeTarget(db, userId, folderId, 'editor');
   if (!target.folderId) {
     await authorizeTarget(db, userId, folderId, 'owner');
-    await db.prepare('DELETE FROM workspaces WHERE id = ?').bind(folderId).run();
+    // files.workspace_id cascades on delete, which would drop rows for files that
+    // still exist in Google Drive. Detach them first so they stay visible as the
+    // uploaders' personal files.
+    await db.batch([
+      db.prepare('UPDATE files SET workspace_id = NULL, workspace_folder_id = NULL WHERE workspace_id = ?').bind(folderId),
+      db.prepare('DELETE FROM workspaces WHERE id = ?').bind(folderId),
+    ]);
     return c.json({ success: true });
   }
 

@@ -1,4 +1,9 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { GoogleDriveService } from './google-drive';
+
+// Files handled per policy per cron run, to stay within per-invocation limits;
+// the rest are picked up by the next run.
+const RETENTION_BATCH_SIZE = 200;
 
 export class PolicyService {
   constructor(private db: D1Database) {}
@@ -37,45 +42,49 @@ export class PolicyService {
     await this.db.prepare('UPDATE workspaces SET used_bytes = COALESCE(used_bytes, 0) + ? WHERE id = ?').bind(sizeDelta, workspaceId).run();
   }
 
-  async processAutoDeleteRetentionPolicies(googleClientId: string, googleClientSecret: string, kv: KVNamespace) {
-    // 1. Get all auto_delete policies
+  // Applies auto_delete retention policies. Expired files are moved to the Google
+  // Drive bin first (recoverable for 30 days if a policy was misconfigured), and
+  // their rows are removed only once Google confirmed, so the two stay in step.
+  async processAutoDeleteRetentionPolicies(driveService: GoogleDriveService) {
     const { results: policies } = await this.db.prepare(
       `SELECT * FROM workspace_policies WHERE policy_type = 'data_retention' AND json_extract(config, '$.action') = 'auto_delete'`
     ).all<{ id: string, workspace_id: string, target_type: string, target_id: string | null, config: string }>();
 
     for (const policy of policies) {
-      const config = JSON.parse(policy.config) as { action: string, days: number };
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - config.days);
-      const cutoffStr = cutoffDate.toISOString();
-
-      let query = '';
-      let binds: any[] = [];
-
-      if (policy.target_type === 'workspace') {
-        query = `SELECT f.id, f.user_id, f.google_file_id, f.size, f.workspace_id, d.id as driveId 
-                 FROM files f JOIN drive_accounts d ON f.drive_account_id = d.id 
-                 WHERE f.workspace_id = ? AND f.created_at < ?`;
-        binds = [policy.workspace_id, cutoffStr];
-      } else {
-        query = `SELECT f.id, f.user_id, f.google_file_id, f.size, f.workspace_id, d.id as driveId 
-                 FROM files f JOIN drive_accounts d ON f.drive_account_id = d.id 
-                 WHERE f.workspace_id = ? AND f.workspace_folder_id = ? AND f.created_at < ?`;
-        binds = [policy.workspace_id, policy.target_id, cutoffStr];
+      let days: unknown;
+      try {
+        days = JSON.parse(policy.config).days;
+      } catch {
+        days = undefined;
+      }
+      if (typeof days !== 'number' || !Number.isInteger(days) || days < 1) {
+        console.error(`Skipping retention policy ${policy.id}: invalid "days" in config`);
+        continue;
       }
 
-      const { results: expiredFiles } = await this.db.prepare(query).bind(...binds).all<{ id: string, user_id: string, google_file_id: string, size: number, workspace_id: string, driveId: string }>();
+      // Compare in SQLite's own datetime format (created_at is 'YYYY-MM-DD HH:MM:SS').
+      const cutoff = `-${days} days`;
+      const folderFilter = policy.target_type === 'workspace' ? '' : 'AND workspace_folder_id = ?';
+      const binds: unknown[] = policy.target_type === 'workspace'
+        ? [policy.workspace_id, cutoff]
+        : [policy.workspace_id, cutoff, policy.target_id];
+      const { results: expiredFiles } = await this.db.prepare(
+        `SELECT id, google_file_id, size, workspace_id, drive_account_id FROM files
+         WHERE workspace_id = ? AND created_at < datetime('now', ?) ${folderFilter}
+         LIMIT ${RETENTION_BATCH_SIZE}`
+      ).bind(...binds).all<{ id: string, google_file_id: string, size: number, workspace_id: string, drive_account_id: string }>();
 
-      if (expiredFiles.length > 0) {
-        // dynamic import or require is hard in workers without proper structure. 
-        // We will just do a simple db delete for now and rely on sync to reflect drive state, 
-        // or just delete from DB and update quota. Ideally we would call GoogleDriveService.
-        for (const file of expiredFiles) {
-          // In a real app we would call driveService.deleteFile(file.driveId, file.google_file_id) here
-          // We will just remove from DB and update quota for this implementation
-          await this.db.prepare('DELETE FROM files WHERE id = ?').bind(file.id).run();
-          await this.updateWorkspaceStorage(file.workspace_id, -file.size);
+      for (const file of expiredFiles) {
+        try {
+          await driveService.trashFile(file.drive_account_id, file.google_file_id);
+        } catch (err) {
+          console.error(`Retention: could not trash ${file.id} in Google Drive; keeping it`, err);
+          continue;
         }
+        await this.db.batch([
+          this.db.prepare('DELETE FROM files WHERE id = ?').bind(file.id),
+          this.db.prepare('UPDATE workspaces SET used_bytes = MAX(0, COALESCE(used_bytes, 0) - ?) WHERE id = ?').bind(file.size || 0, file.workspace_id),
+        ]);
       }
     }
   }

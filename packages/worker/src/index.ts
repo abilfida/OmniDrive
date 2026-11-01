@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { GoogleDriveService } from './services/google-drive';
 import { bodyLimit } from 'hono/body-limit';
 import type { AppContext, Env } from './types/env';
 import { corsMiddleware } from './middleware/cors';
@@ -129,7 +130,8 @@ export default {
 
     // Data retention policies
     const policyService = new PolicyService(env.DB);
-    ctx.waitUntil(policyService.processAutoDeleteRetentionPolicies(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.KV));
+    const driveService = new GoogleDriveService(env.KV, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.TOKEN_ENCRYPTION_KEY);
+    ctx.waitUntil(policyService.processAutoDeleteRetentionPolicies(driveService));
   },
 } satisfies ExportedHandler<Env>;
 

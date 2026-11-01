@@ -98,4 +98,18 @@ describe('folders router authorization', () => {
       expect(await folder('wf-2')).toBeNull();
     });
   });
+
+  it('deleting a workspace keeps its files as the uploaders\' personal files', async () => {
+    await t.db.batch([
+      t.db.prepare("INSERT INTO drive_accounts (id, user_id, google_account_id, email) VALUES ('d1', 'owner', 'g', 'o@x')"),
+      t.db.prepare(`INSERT INTO files (id, user_id, drive_account_id, workspace_id, workspace_folder_id, google_file_id, name, mime_type, size, google_created_at, google_modified_at)
+                    VALUES ('f1', 'owner', 'd1', 'ws-1', 'wf-1', 'gf1', 'a.txt', 'text/plain', 1, 't', 't')`),
+    ]);
+
+    expect((await apiRequest(t, owner, 'DELETE', '/api/folders/ws-1')).status).toBe(200);
+
+    expect(await t.db.prepare("SELECT id FROM workspaces WHERE id = 'ws-1'").first()).toBeNull();
+    expect(await t.db.prepare("SELECT workspace_id, workspace_folder_id FROM files WHERE id = 'f1'").first())
+      .toEqual({ workspace_id: null, workspace_folder_id: null });
+  });
 });
