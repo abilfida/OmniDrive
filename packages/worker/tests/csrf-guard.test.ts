@@ -83,6 +83,26 @@ describe('csrfGuard', () => {
     expect(res.status).toBe(200);
   });
 
+  it.each(['/api/auth/login', '/api/auth/register'])('rejects %s from a foreign origin (login CSRF)', async (path) => {
+    const { app, env } = createApp();
+    const res = await app.request(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', Origin: 'https://evil.example' },
+      body: '{"username":"attacker","password":"x"}',
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects /api/auth/login with a foreign Referer and no Origin', async () => {
+    const { app, env } = createApp();
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Referer: 'https://evil.example/page' },
+      body: '{}',
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
   it('exempts POST /api/shared/:id/verify (public password check)', async () => {
     const { app, env } = createApp();
     const res = await app.request('/api/shared/abc123/verify', {

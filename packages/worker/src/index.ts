@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { AppContext, Env } from './types/env';
 import { corsMiddleware } from './middleware/cors';
 import { securityHeaders } from './middleware/security-headers';
@@ -91,6 +92,12 @@ app.use('/api/shared/:id/verify', rateLimiter({
   },
 }));
 app.use('/api/*', rateLimiter({ windowMs: 60_000, maxRequests: 100 }));
+// File bytes go straight to Google, so API bodies are small JSON. Without a cap,
+// the Node server would buffer arbitrarily large bodies, even on unauthenticated routes.
+app.use('/api/*', bodyLimit({
+  maxSize: 1024 * 1024,
+  onError: (c) => c.json({ error: 'Request body too large' }, 413),
+}));
 
 app.route('/api/auth', authRouter);
 app.route('/api/drives', drivesRouter);
