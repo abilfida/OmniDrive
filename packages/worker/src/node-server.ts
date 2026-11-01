@@ -8,6 +8,7 @@ import { setShuttingDown } from './services/sync';
 import worker from './index';
 import { D1DatabaseWrapper } from './polyfills/d1';
 import { KVNamespaceWrapper } from './polyfills/kv';
+import { applySchema } from './polyfills/schema';
 import dotenv from 'dotenv';
 import type { Env } from './types/env';
 import { checkNodeEnv } from './lib/node-env';
@@ -25,25 +26,22 @@ if (envCheck.errors.length > 0) {
 const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-// Initialize DB and run migrations if empty
+// Initialize DB and bring it up to the current schema (new and upgraded volumes alike)
 const dbPath = path.join(dataDir, 'omnidrive.sqlite');
-const isNewDb = !fs.existsSync(dbPath);
 const d1 = new D1DatabaseWrapper(dbPath);
 
-if (isNewDb) {
-  const schemaPath = path.join(process.cwd(), 'src/db/schema.sql');
-  if (fs.existsSync(schemaPath)) {
-    d1.exec(fs.readFileSync(schemaPath, 'utf-8'));
-    console.log('Database schema initialized.');
-  }
-} else {
-  // Migration for existing DB
-  try {
-    d1.exec("ALTER TABLE sync_state ADD COLUMN next_page_token TEXT;");
-  } catch (e) {
-    // Ignore if column already exists
-  }
+// The Docker image ships schema.sql next to the bundle; local runs use the source tree.
+const schemaPath = [
+  path.join(__dirname, 'src/db/schema.sql'),
+  path.join(process.cwd(), 'src/db/schema.sql'),
+].find((p) => fs.existsSync(p));
+if (!schemaPath) {
+  console.error('[db] ERROR: src/db/schema.sql not found next to the server bundle or in the working directory');
+  process.exit(1);
 }
+const addedColumns = applySchema(d1, fs.readFileSync(schemaPath, 'utf-8'));
+if (addedColumns.length > 0) console.log(`[db] Added missing columns: ${addedColumns.join(', ')}`);
+console.log('Database schema is up to date.');
 
 // Startup cleanup: reset stuck syncing states
 d1.exec("UPDATE sync_state SET status = 'error', error_message = 'Sync interrupted by server restart' WHERE status = 'syncing'");
