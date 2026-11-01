@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.2] - 2026-11-02
+
+### Security
+
+- **The Docker image runs as an unprivileged user** (`node`) instead of root. On startup, the image fixes ownership of data volumes created by earlier releases, so existing installations keep working.
+- **The setup wizard no longer replaces your encryption key.** Re-running it generated a new `TOKEN_ENCRYPTION_KEY`, which made every connected Google Drive and S3 key unreadable. Existing keys are now kept, and on Cloudflare they are only set when missing. Secrets are also passed to Wrangler without a shell, so special characters can't break or inject into the command.
+
+### Fixed
+
+- **Docker:** Adds a health check. `better-sqlite3` is pinned to the tested version instead of whatever was latest when the image was built.
+- **Docker:** SQLite uses WAL mode with a busy timeout, so browsing isn't blocked while a sync writes.
+- **Docker:** `docker stop` shuts down cleanly in about a second instead of being killed after 10 seconds.
+- **Docker:** Expired sessions and login states are cleaned up instead of growing the KV database forever.
+- **Cloudflare:** `wrangler.example.toml` now builds; it was missing the `nodejs_compat_v2` flag.
+- **`deploy.sh`:** Prompts work when the script is run with `curl | bash`. Updates are fast-forward only, it stops instead of deploying when your local changes conflict with an update, it restarts correctly after updating, and dependencies are installed with `npm ci`.
+- The factory reset script now also drops the S3 tables.
+
+### Changed
+
+- README: backup and restore instructions for self-hosted installs, and the `TRUST_PROXY` setting.
+- Removed stray scratch files and a duplicate migration from the repository.
+
+### Upgrade notes
+
+- No action needed for existing Docker volumes: ownership is fixed automatically on first start.
+- Back up `.env` together with your data. A database restored without the matching `TOKEN_ENCRYPTION_KEY` is unusable.
+
 ## [0.11.1] - 2026-11-02
 
 ### Fixed
