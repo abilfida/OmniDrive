@@ -1,5 +1,23 @@
 import Database from 'better-sqlite3';
 
+// Mirrors the parts of Cloudflare D1's result shape that the app relies on.
+export interface D1ResultMeta {
+  changes: number;
+  last_row_id: number;
+  duration: number;
+}
+
+export interface D1Result<T = any> {
+  success: true;
+  results: T[];
+  meta: D1ResultMeta;
+}
+
+// D1 stores booleans as 1/0; better-sqlite3 rejects them.
+function toSqliteValue(value: any) {
+  return typeof value === 'boolean' ? (value ? 1 : 0) : value;
+}
+
 export class D1PreparedStatementWrapper {
   private db: Database.Database;
   private query: string;
@@ -12,7 +30,23 @@ export class D1PreparedStatementWrapper {
   }
 
   bind(...values: any[]) {
-    return new D1PreparedStatementWrapper(this.db, this.query, values);
+    return new D1PreparedStatementWrapper(this.db, this.query, values.map(toSqliteValue));
+  }
+
+  // Synchronous execution so statements can run inside a better-sqlite3 transaction.
+  executeSync<T = any>(): D1Result<T> {
+    const start = Date.now();
+    const stmt = this.db.prepare(this.query);
+    if (stmt.reader) {
+      const results = stmt.all(...this.params) as T[];
+      return { success: true, results, meta: { changes: 0, last_row_id: 0, duration: Date.now() - start } };
+    }
+    const info = stmt.run(...this.params);
+    return {
+      success: true,
+      results: [],
+      meta: { changes: info.changes, last_row_id: Number(info.lastInsertRowid), duration: Date.now() - start },
+    };
   }
 
   async first<T = any>(): Promise<T | null> {
@@ -29,13 +63,11 @@ export class D1PreparedStatementWrapper {
     });
   }
 
-  async all<T = any>(): Promise<{ results: T[] }> {
+  async all<T = any>(): Promise<D1Result<T>> {
     return new Promise((resolve, reject) => {
       setImmediate(() => {
         try {
-          const stmt = this.db.prepare(this.query);
-          const results = stmt.all(...this.params) as T[];
-          resolve({ results });
+          resolve(this.executeSync<T>());
         } catch (e) {
           reject(e);
         }
@@ -43,18 +75,8 @@ export class D1PreparedStatementWrapper {
     });
   }
 
-  async run(): Promise<{ success: boolean }> {
-    return new Promise((resolve, reject) => {
-      setImmediate(() => {
-        try {
-          const stmt = this.db.prepare(this.query);
-          stmt.run(...this.params);
-          resolve({ success: true });
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
+  async run<T = any>(): Promise<D1Result<T>> {
+    return this.all<T>();
   }
 }
 
@@ -67,6 +89,20 @@ export class D1DatabaseWrapper {
 
   prepare(query: string) {
     return new D1PreparedStatementWrapper(this.db, query);
+  }
+
+  // Like D1, a batch is atomic: any failing statement rolls back the whole batch.
+  async batch<T = any>(statements: D1PreparedStatementWrapper[]): Promise<D1Result<T>[]> {
+    return new Promise((resolve, reject) => {
+      setImmediate(() => {
+        try {
+          const runAll = this.db.transaction(() => statements.map((s) => s.executeSync<T>()));
+          resolve(runAll());
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
   }
 
   exec(query: string) {
