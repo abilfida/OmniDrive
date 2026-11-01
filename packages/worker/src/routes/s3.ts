@@ -7,6 +7,8 @@ import { getMD5HashingStream } from '../lib/crypto-s3';
 import { UploadRouter } from '../services/upload-router';
 import { mapDriveRow } from '../types';
 import { createHash } from 'node:crypto';
+import { AppError } from '../middleware/error-handler';
+import { getWorkspaceRole, hasPermission } from '../middleware/rbac';
 
 export const s3Router = new Hono<AppContext>({ strict: false });
 
@@ -60,6 +62,14 @@ function xmlError(c: any, code: string, message: string, status: number): Respon
 }
 
 s3Router.use('*', s3AuthMiddleware);
+
+// Uploading, overwriting and deleting objects changes the workspace, so it
+// needs editor access; listing and reading only need membership.
+function requireWriteAccess(role: string | null | undefined) {
+  if (!role || !hasPermission(role, 'editor')) {
+    throw new AppError(403, 'Access Denied');
+  }
+}
 
 // GET /s3/ (List Buckets - maps to workspaces)
 s3Router.get('/', async (c) => {
@@ -341,13 +351,14 @@ s3Router.delete('/:bucket/:key{.+}', async (c) => {
   const db = c.env.DB;
 
   const workspace = await db.prepare(`
-    SELECT w.id FROM workspaces w
+    SELECT w.id, wm.role FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
       AND (? IS NULL OR w.id = ?)
   `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
+  requireWriteAccess(workspace.role);
 
   const uploadId = c.req.query('uploadId');
   if (uploadId) {
@@ -422,13 +433,14 @@ s3Router.put('/:bucket/:key{.+}', async (c) => {
   const db = c.env.DB;
 
   const workspace = await db.prepare(`
-    SELECT w.id FROM workspaces w
+    SELECT w.id, wm.role FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
       AND (? IS NULL OR w.id = ?)
   `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
+  requireWriteAccess(workspace.role);
 
   const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
   const mimeType = c.req.header('Content-Type') || 'application/octet-stream';
@@ -536,6 +548,8 @@ async function handleUploadPart(c: any, uploadId: string, partNumber: number): P
       AND (? IS NULL OR workspace_id = ?)
   `).bind(uploadId, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
   if (!upload) return c.text('Invalid uploadId', 404);
+  // Re-checked per part: access may have been revoked since the upload started.
+  requireWriteAccess(await getWorkspaceRole(db, upload.workspace_id, userId));
 
   const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
   const bodyStream = c.req.raw.body;
@@ -597,13 +611,14 @@ s3Router.post('/:bucket/:key{.+}', async (c) => {
   const db = c.env.DB;
 
   const workspace = await db.prepare(`
-    SELECT w.id FROM workspaces w
+    SELECT w.id, wm.role FROM workspaces w
     JOIN workspace_members wm ON w.id = wm.workspace_id
     WHERE w.name = ? AND wm.user_id = ?
       AND (? IS NULL OR w.id = ?)
   `).bind(bucketName, userId, s3WorkspaceId, s3WorkspaceId).first<any>();
 
   if (!workspace) return c.text('Bucket not found', 404);
+  requireWriteAccess(workspace.role);
 
   const driveService = new GoogleDriveService(
     c.env.KV,

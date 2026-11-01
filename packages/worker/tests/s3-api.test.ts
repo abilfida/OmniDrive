@@ -148,9 +148,12 @@ describe('S3 API compatibility endpoints', () => {
                     };
                   }
                 }
-                if (sql.includes('SELECT w.id FROM workspaces w')) {
-                  // Resolve workspace
-                  return workspaceResolved;
+                if (sql.includes('SELECT w.id FROM workspaces w') || sql.includes('SELECT w.id, wm.role FROM workspaces w')) {
+                  // Resolve workspace (write handlers also read the caller's role)
+                  return workspaceResolved ? { role: 'owner', ...workspaceResolved } : workspaceResolved;
+                }
+                if (sql.includes('SELECT role FROM workspace_members')) {
+                  return { role: 'owner' };
                 }
                 if (sql.includes('SELECT id FROM workspace_folders')) {
                   return folderResolved;
