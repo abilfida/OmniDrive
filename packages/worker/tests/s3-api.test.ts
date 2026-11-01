@@ -127,6 +127,7 @@ describe('S3 API compatibility endpoints', () => {
     const encryptedSecret = await encrypt(SECRET_ACCESS_KEY, TOKEN_ENCRYPTION_KEY);
 
     const mockDb = {
+      batch: vi.fn(async (statements: any[]) => Promise.all(statements.map((stmt) => stmt.run()))),
       prepare: vi.fn((sql: string) => {
         return {
           bind: vi.fn((...args: any[]) => {
@@ -745,9 +746,11 @@ describe('S3 API compatibility endpoints', () => {
       expect(res.status).toBe(204);
       expect(deleteSpy).toHaveBeenCalledWith('drive-123', 'g-123');
       
-      const updateQuery = sqlQueries.find(q => q.sql.includes('UPDATE files SET is_trashed = 1'));
-      expect(updateQuery).toBeDefined();
-      expect(updateQuery.args[0]).toBe('file-123');
+      // The object is permanently gone from Drive, so its row is removed (not trashed).
+      const deleteQuery = sqlQueries.find(q => q.sql.includes('DELETE FROM files WHERE id = ?'));
+      expect(deleteQuery).toBeDefined();
+      expect(deleteQuery!.args[0]).toBe('file-123');
+      expect(sqlQueries.find(q => q.sql.includes('UPDATE files SET is_trashed = 1'))).toBeUndefined();
 
       deleteSpy.mockRestore();
     });
