@@ -29,20 +29,8 @@ authRouter.post('/register', async (c) => {
   if (passwordError) throw new AppError(400, passwordError);
 
   const db = c.env.DB;
-  
-  // Check setup status
-  const setupRes = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-  const isSetup = (setupRes?.count || 0) > 0;
 
-  if (isSetup) {
-    if (!invitation_code) throw new AppError(400, 'Invitation code required');
-    const inv = await db.prepare('SELECT id, max_uses, used_count FROM invitation_codes WHERE code = ?').bind(invitation_code).first<{ id: string, max_uses: number, used_count: number }>();
-    if (!inv) throw new AppError(400, 'Invalid invitation code');
-    if (inv.max_uses > 0 && inv.used_count >= inv.max_uses) throw new AppError(400, 'Invitation code has reached its usage limit');
-    
-    await db.prepare('UPDATE invitation_codes SET used_count = used_count + 1 WHERE id = ?').bind(inv.id).run();
-  }
-
+  // Validate everything before an invitation code is consumed.
   const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
   if (existing) throw new AppError(400, 'Username already exists');
 
@@ -51,13 +39,42 @@ authRouter.post('/register', async (c) => {
     if (existingEmail) throw new AppError(400, 'Email already exists');
   }
 
+  const setupRes = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+  const isSetup = (setupRes?.count || 0) > 0;
+
+  let invitationId: string | null = null;
+  if (isSetup) {
+    if (!invitation_code) throw new AppError(400, 'Invitation code required');
+    const inv = await db.prepare('SELECT id FROM invitation_codes WHERE code = ?').bind(invitation_code).first<{ id: string }>();
+    if (!inv) throw new AppError(400, 'Invalid invitation code');
+    // Claim one use atomically so concurrent registrations can't exceed max_uses.
+    const claim = await db.prepare(
+      'UPDATE invitation_codes SET used_count = used_count + 1 WHERE id = ? AND (max_uses = 0 OR used_count < max_uses)'
+    ).bind(inv.id).run();
+    if (claim.meta.changes === 0) throw new AppError(400, 'Invitation code has reached its usage limit');
+    invitationId = inv.id;
+  }
+
   const id = generateId();
   const passwordHash = await bcrypt.hash(password, 10);
   const isSuperAdmin = isSetup ? 0 : 1;
-  
-  await db.prepare(
-    'INSERT INTO users (id, username, password_hash, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, username, passwordHash, email || null, name || username, isSuperAdmin).run();
+
+  let inserted;
+  try {
+    // The first account becomes super admin only if the table is still empty at
+    // insert time, so two racing setup requests can't both get admin rights.
+    inserted = await db.prepare(
+      `INSERT INTO users (id, username, password_hash, email, name, is_super_admin)
+       SELECT ?, ?, ?, ?, ?, ? WHERE ? = 0 OR NOT EXISTS (SELECT 1 FROM users)`
+    ).bind(id, username, passwordHash, email || null, name || username, isSuperAdmin, isSuperAdmin).run();
+  } catch (err) {
+    if (invitationId) await releaseInvitation(db, invitationId);
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new AppError(400, 'Username or email already exists');
+    throw err;
+  }
+  if (inserted.meta.changes === 0) {
+    throw new AppError(409, 'Setup has already been completed; an invitation code is required');
+  }
 
   const sessionData: SessionData = { userId: id, username, email: email || null, name: name || username, avatarUrl: null, role: isSuperAdmin ? 'super_admin' : 'member', createdAt: Date.now() };
   const sessionId = generateId();
@@ -68,6 +85,11 @@ authRouter.post('/register', async (c) => {
 
   return c.json({ success: true, user: sessionData, isSuperAdmin: !!isSuperAdmin });
 });
+
+// Gives back an invitation use claimed by a registration that then failed.
+async function releaseInvitation(db: D1Database, invitationId: string) {
+  await db.prepare('UPDATE invitation_codes SET used_count = used_count - 1 WHERE id = ? AND used_count > 0').bind(invitationId).run();
+}
 
 authRouter.post('/login', async (c) => {
   const { username, password } = await c.req.json();
