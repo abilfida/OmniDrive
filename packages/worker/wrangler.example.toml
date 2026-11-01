@@ -5,6 +5,8 @@
 name = "omnidrive-api"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
+# Required: the worker imports node:crypto and uses Buffer
+compatibility_flags = [ "nodejs_compat_v2" ]
 
 [triggers]
 crons = ["*/30 * * * *"]
@@ -21,11 +23,15 @@ binding = "KV"
 id = "<your-kv-namespace-id>"
 
 [vars]
+# Public URL of the web app (used for CORS, CSRF checks and share links)
+FRONTEND_URL = "https://<your-project>.pages.dev"
 
 # Security secrets — set via:
 #   npx wrangler secret put JWT_SECRET
 #   npx wrangler secret put TOKEN_ENCRYPTION_KEY
-# Generate with: node -e "console.log(crypto.randomUUID().replace(/-/g,''))"
+# Generate each with: openssl rand -hex 32
+# Never change TOKEN_ENCRYPTION_KEY on a deployment with data: stored Drive
+# tokens and S3 keys are encrypted with it.
 
 [observability]
 enabled = false

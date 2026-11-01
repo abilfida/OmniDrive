@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve absolute path of the script before any cd operations
-SCRIPT_PATH=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+# True when a terminal can actually be opened. Prompts read from it, because
+# under `curl | bash` stdin is the script itself; without one (CI, cron) they
+# fall back to their safe defaults.
+has_tty() { { : < /dev/tty; } 2>/dev/null; }
 
 echo "Starting Omnidrive Setup..."
 
@@ -45,10 +47,11 @@ if [ -d ".git" ]; then
             echo "--------------------------------------------------------"
             
             WANT_UPDATE="n"
-            if [ -t 1 ]; then
+            # Prompts read from the terminal: under `curl | bash` stdin is the script itself.
+            if has_tty; then
                 read -p "Do you want to update to the latest version? (y/N): " WANT_UPDATE < /dev/tty || WANT_UPDATE="n"
             else
-                read -p "Do you want to update to the latest version? (y/N): " WANT_UPDATE || WANT_UPDATE="n"
+                echo "No terminal available; skipping the update."
             fi
             
             if [[ "$WANT_UPDATE" =~ ^[Yy]$ ]]; then
@@ -62,10 +65,9 @@ if [ -d ".git" ]; then
                     echo "3) Cancel update"
                     
                     CHANGE_CHOICE="3"
-                    if [ -t 1 ]; then
+                    CHANGE_CHOICE="3"
+                    if has_tty; then
                         read -p "Enter choice [1-3]: " CHANGE_CHOICE < /dev/tty || CHANGE_CHOICE="3"
-                    else
-                        read -p "Enter choice [1-3]: " CHANGE_CHOICE || CHANGE_CHOICE="3"
                     fi
                     
                     case "$CHANGE_CHOICE" in
@@ -91,7 +93,8 @@ if [ -d ".git" ]; then
                     echo "Updating repository (git pull)..."
                     
                     PULL_FAILED=false
-                    git pull origin "$CURRENT_BRANCH" || PULL_FAILED=true
+                    # Fast-forward only: never create merge commits under the deployer identity.
+                    git pull --ff-only origin "$CURRENT_BRANCH" || PULL_FAILED=true
                     
                     # Check for merge conflicts
                     if git ls-files -u | grep -q .; then
@@ -108,13 +111,18 @@ if [ -d ".git" ]; then
                     # Pop stash if we stashed, regardless of pull success
                     if [ "$STASHED" = true ]; then
                         echo "Restoring stashed local changes..."
-                        git stash pop || echo "Notice: Stash popped with conflicts. Please resolve manually."
+                        if ! git stash pop; then
+                            echo "Error: Your saved local changes conflict with the update." >&2
+                            echo "Resolve the conflicts (see 'git status'), then run this script again." >&2
+                            exit 1
+                        fi
                     fi
                     
                     # Restart script with updated code to avoid bash shell parser offset shift issues
                     if [ "$PULL_FAILED" = false ]; then
                         echo "Restarting script with updated code..."
-                        exec bash "$SCRIPT_PATH" "$@"
+                        # Re-run from the repository: under `curl | bash`, $0 is not a script file.
+                        exec bash ./deploy.sh "$@"
                     fi
                 fi
             else
@@ -140,10 +148,11 @@ fi
 
 # Ensure dependencies are installed quietly so the CLI tools are available
 echo "Installing dependencies..."
-npm install --quiet --no-fund --no-audit
+# npm ci installs exactly what package-lock.json pins
+npm ci --quiet --no-fund --no-audit
 
 # Hand off to the Node.js interactive CLI
-if [ -t 1 ]; then
+if has_tty; then
     # Connect stdin to the terminal so interactive prompts work over curl | bash
     node scripts/onboard-deploy.mjs "$@" < /dev/tty
 else

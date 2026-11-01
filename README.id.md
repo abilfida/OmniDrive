@@ -146,6 +146,7 @@ Jika kamu tidak menggunakan script `deploy.sh`, kamu bisa mendeploy secara manua
    ```
 2. **Buat Database D1**
    ```bash
+   cp packages/worker/wrangler.example.toml packages/worker/wrangler.toml
    npx wrangler d1 create omnidrive
    ```
    *Perbarui file `wrangler.toml` di dalam `packages/worker/wrangler.toml` dengan `database_id` yang didapat.*

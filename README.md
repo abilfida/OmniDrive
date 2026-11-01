@@ -145,6 +145,7 @@ If you prefer not to use the `deploy.sh` script, you can deploy manually:
    ```
 2. **Create D1 Database**
    ```bash
+   cp packages/worker/wrangler.example.toml packages/worker/wrangler.toml
    npx wrangler d1 create omnidrive
    ```
    *Update `packages/worker/wrangler.toml` with the generated `database_id`.*
