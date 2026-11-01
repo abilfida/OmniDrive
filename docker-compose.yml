@@ -9,8 +9,8 @@ services:
     environment:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - JWT_SECRET=${JWT_SECRET}
-      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set, generate with openssl rand -hex 32}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY must be set, generate with openssl rand -hex 32}
       - FRONTEND_URL=${FRONTEND_URL}
       - WORKER_URL=${WORKER_URL}
       - DATA_DIR=/app/data

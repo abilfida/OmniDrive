@@ -1,7 +1,21 @@
-node_modules
+**/node_modules
 .git
-.wrangler
-dist
+**/.wrangler
+**/dist
 build
-.env
-.dev.vars
+
+# Secrets and local config. This also excludes packages/web/.env.production,
+# which points at the hosted Cloudflare worker: Docker images must build the
+# web app against a same-origin API.
+**/.env
+**/.env.*
+!.env.example
+**/.dev.vars
+
+# Local data and dumps
+data
+packages/worker/data
+**/*.sqlite
+**/*.sqlite-*
+**/db_export*.sql
+**/*.log

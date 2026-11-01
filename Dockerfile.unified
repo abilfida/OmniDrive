@@ -12,7 +12,11 @@ COPY tsconfig.base.json ./
 COPY packages/worker ./packages/worker
 COPY packages/web ./packages/web
 
-# Build frontend and node backend
+# Build frontend and node backend.
+# The unified image serves the API from the same origin, so the web build
+# defaults to relative /api URLs. Override only for a split deployment.
+ARG VITE_API_URL=""
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build:web
 RUN npm --workspace=@omnidrive/worker run build:node
 
