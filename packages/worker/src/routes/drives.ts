@@ -334,8 +334,10 @@ drivesRouter.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const driveId = c.req.param('id');
 
-  await c.env.DB.prepare('DELETE FROM drive_accounts WHERE id = ? AND user_id = ?')
+  const { meta } = await c.env.DB.prepare('DELETE FROM drive_accounts WHERE id = ? AND user_id = ?')
     .bind(driveId, userId).run();
+  // Only drop tokens for a drive this user actually owned.
+  if (meta.changes === 0) throw new AppError(404, 'Drive not found');
 
   await c.env.KV.delete(`tokens:${driveId}`);
   await c.env.KV.delete(`oauth:${driveId}`);

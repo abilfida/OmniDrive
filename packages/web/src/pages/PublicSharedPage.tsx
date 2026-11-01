@@ -139,13 +139,17 @@ export function PublicSharedPage() {
           </div>
         )}
 
-        <button
-          onClick={handleDownload}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white bg-blue-600 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm mt-8"
-        >
-          <Download size={20} />
-          Download
-        </button>
+        {meta?.allowDownloads === false ? (
+          <p className="text-sm text-gray-500 mt-8">The owner has disabled downloads for this link.</p>
+        ) : meta?.type !== 'folder' && (
+          <button
+            onClick={handleDownload}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white bg-blue-600 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm mt-8"
+          >
+            <Download size={20} />
+            Download
+          </button>
+        )}
       </div>
     );
   };
