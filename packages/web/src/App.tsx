@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthGuard } from './components/AuthGuard';
 import { AppLayout } from './components/layout/AppLayout';
 import { ToastContainer } from './components/Toast';
@@ -17,10 +17,27 @@ import { WorkspacesPage } from './pages/WorkspacesPage';
 import { SetupPage } from './pages/SetupPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { api } from './lib/api';
+import { useAuthStore } from './stores/authStore';
 export const SetupGuard = ({ children, isSetup }: { children: React.ReactNode, isSetup: boolean }) => {
   if (isSetup === false) return <Navigate to="/setup" replace />;
   return <>{children}</>;
 };
+
+// The admin API re-checks permissions; this only keeps members off a page
+// whose every request would fail.
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const user = useAuthStore((state) => state.user);
+  if (user?.role !== 'super_admin') return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
+const NotFoundPage = () => (
+  <div className="flex flex-col items-center justify-center gap-3 p-16 text-center">
+    <h2 className="text-lg font-semibold text-gray-800">Page not found</h2>
+    <p className="text-sm text-gray-500">The page you were looking for doesn't exist.</p>
+    <Link to="/" className="text-sm font-medium text-blue-600 hover:underline">Go to the dashboard</Link>
+  </div>
+);
 
 export const App = () => {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -77,7 +94,8 @@ export const App = () => {
           <Route path="/shared" element={<SharedLinksPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/starred" element={<StarredPage />} />
-          <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
