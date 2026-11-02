@@ -173,8 +173,11 @@ authRouter.get('/callback', async (c) => {
   const targetUserId = c.get('userId');
   const db = env.DB;
 
-  await db.prepare('UPDATE users SET google_id = ? WHERE id = ?')
-    .bind(googleUser.id, targetUserId).run();
+  // users.google_id is unique and only informational. When another user already
+  // linked this Google account, keep theirs instead of failing the whole
+  // connection with a constraint error after the token exchange.
+  await db.prepare('UPDATE users SET google_id = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE google_id = ? AND id != ?)')
+    .bind(googleUser.id, targetUserId, googleUser.id, targetUserId).run();
 
   let drive = await db.prepare('SELECT id FROM drive_accounts WHERE google_account_id = ? AND user_id = ?').bind(googleUser.id, targetUserId).first<{ id: string }>();
   if (!drive) {
