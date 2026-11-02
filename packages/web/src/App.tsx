@@ -1,27 +1,29 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthGuard } from './components/AuthGuard';
 import { AppLayout } from './components/layout/AppLayout';
 import { ToastContainer } from './components/Toast';
 import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { FilesPage } from './pages/FilesPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { SharedLinksPage } from './pages/SharedLinksPage';
-import { PublicSharedPage } from './pages/PublicSharedPage';
-import { AutomationsPage } from './pages/AutomationsPage';
-import { SearchPage } from './pages/SearchPage';
-import { TrashPage } from './pages/TrashPage';
-import { StarredPage } from './pages/StarredPage';
-import { WorkspacesPage } from './pages/WorkspacesPage';
-import { SetupPage } from './pages/SetupPage';
-import { AdminUsersPage } from './pages/AdminUsersPage';
 import { api } from './lib/api';
 import { useAuthStore } from './stores/authStore';
 export const SetupGuard = ({ children, isSetup }: { children: React.ReactNode, isSetup: boolean }) => {
   if (isSetup === false) return <Navigate to="/setup" replace />;
   return <>{children}</>;
 };
+
+// Pages load on demand, so the first visit doesn't download every screen.
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const FilesPage = lazy(() => import('./pages/FilesPage').then((m) => ({ default: m.FilesPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const SharedLinksPage = lazy(() => import('./pages/SharedLinksPage').then((m) => ({ default: m.SharedLinksPage })));
+const PublicSharedPage = lazy(() => import('./pages/PublicSharedPage').then((m) => ({ default: m.PublicSharedPage })));
+const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then((m) => ({ default: m.AutomationsPage })));
+const SearchPage = lazy(() => import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })));
+const TrashPage = lazy(() => import('./pages/TrashPage').then((m) => ({ default: m.TrashPage })));
+const StarredPage = lazy(() => import('./pages/StarredPage').then((m) => ({ default: m.StarredPage })));
+const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage').then((m) => ({ default: m.WorkspacesPage })));
+const SetupPage = lazy(() => import('./pages/SetupPage').then((m) => ({ default: m.SetupPage })));
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })));
 
 // The admin API re-checks permissions; this only keeps members off a page
 // whose every request would fail.
@@ -30,6 +32,12 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   if (user?.role !== 'super_admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 };
+
+const PageLoading = () => (
+  <div className="flex items-center justify-center p-16" role="status" aria-label="Loading">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+  </div>
+);
 
 const NotFoundPage = () => (
   <div className="flex flex-col items-center justify-center gap-3 p-16 text-center">
@@ -69,6 +77,7 @@ export const App = () => {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/setup" element={isSetup ? <Navigate to="/login" /> : <SetupPage />} />
         <Route path="/login" element={!isSetup ? <Navigate to="/setup" /> : <LoginPage />} />
@@ -98,6 +107,7 @@ export const App = () => {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };
