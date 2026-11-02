@@ -22,9 +22,35 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return result === 0;
 }
 
+// Short fingerprint of the link's password hash, embedded in share sessions so
+// changing the password signs existing visitors out. Hashed again so the
+// cookie doesn't carry part of the stored hash.
+async function passwordVersion(passwordHash: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(passwordHash));
+  return Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Parses an optional expiry from the request. undefined = not provided,
+// null = no expiry, or an ISO string. Unparseable input would otherwise be
+// stored as-is and never compare as expired.
+function parseExpiry(value: unknown): { ok: true; value: string | null | undefined } | { ok: false } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null || value === '') return { ok: true, value: null };
+  const time = typeof value === 'string' || typeof value === 'number' ? new Date(value).getTime() : NaN;
+  return Number.isNaN(time) ? { ok: false } : { ok: true, value: new Date(time).toISOString() };
+}
+
+function isValidDownloadLimit(value: unknown): boolean {
+  return value === null || value === undefined || (Number.isInteger(value) && (value as number) > 0);
+}
+
 async function validateSharedLink(c: Context<AppContext>, link: SharedLink): Promise<{ ok: boolean; status?: number; error?: string; requiresPassword?: boolean }> {
-  if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
-    return { ok: false, status: 410, error: 'Link expired' };
+  if (link.expiresAt) {
+    const expiry = new Date(link.expiresAt).getTime();
+    // Fail closed: a stored value that doesn't parse counts as expired.
+    if (Number.isNaN(expiry) || expiry < Date.now()) {
+      return { ok: false, status: 410, error: 'Link expired' };
+    }
   }
   
   const requiresPassword = !!link.passwordHash;
@@ -36,7 +62,7 @@ async function validateSharedLink(c: Context<AppContext>, link: SharedLink): Pro
   if (sessionCookie) {
     try {
       const payload = await verify(sessionCookie, c.env.JWT_SECRET, 'HS256');
-      if (payload.id === link.id) {
+      if (payload.id === link.id && payload.pv === await passwordVersion(link.passwordHash!)) {
         return { ok: true };
       }
     } catch (e) {
@@ -63,6 +89,9 @@ sharedRouter.post('/', authGuard, async (c) => {
   if (!targetType || !targetId) {
     return c.json({ error: 'targetType and targetId are required' }, 400);
   }
+  const expiry = parseExpiry(expiresAt);
+  if (!expiry.ok) return c.json({ error: 'expiresAt must be a valid date' }, 400);
+  if (!isValidDownloadLimit(maxDownloads)) return c.json({ error: 'maxDownloads must be a positive whole number' }, 400);
 
   const db = c.env.DB;
 
@@ -128,7 +157,7 @@ sharedRouter.post('/', authGuard, async (c) => {
       await db.prepare(
         'INSERT INTO shared_links (id, user_id, target_type, target_id, password_hash, expires_at, allow_downloads, allow_uploads, max_downloads, require_email, webhook_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, userId, targetType, targetId, passwordHash, expiresAt || null, allowDownloads ? 1 : 0, allowUploads ? 1 : 0, maxDownloads, requireEmail ? 1 : 0, webhookUrl)
+      .bind(id, userId, targetType, targetId, passwordHash, expiry.value ?? null, allowDownloads ? 1 : 0, allowUploads ? 1 : 0, maxDownloads, requireEmail ? 1 : 0, webhookUrl)
       .run();
       success = true;
     } catch (e: any) {
@@ -192,6 +221,10 @@ sharedRouter.put('/:id', authGuard, async (c) => {
     password
   } = body;
 
+  const expiry = parseExpiry(body.expiresAt);
+  if (!expiry.ok) return c.json({ error: 'expiresAt must be a valid date' }, 400);
+  if (!isValidDownloadLimit(body.maxDownloads)) return c.json({ error: 'maxDownloads must be a positive whole number' }, 400);
+
   if (webhookUrl && webhookUrl !== existing.webhook_url) {
     const webhookError = validateWebhookUrl(webhookUrl);
     if (webhookError) return c.json({ error: webhookError }, 400);
@@ -238,7 +271,7 @@ sharedRouter.put('/:id', authGuard, async (c) => {
     'UPDATE shared_links SET expires_at = ?, allow_downloads = ?, allow_uploads = ?, max_downloads = ?, require_email = ?, webhook_url = ?, password_hash = ? WHERE id = ? AND user_id = ?'
   )
   .bind(
-    expiresAt || null,
+    expiry.value === undefined ? (expiresAt || null) : expiry.value,
     allowDownloads ? 1 : 0,
     allowUploads ? 1 : 0,
     maxDownloads || null,
@@ -360,7 +393,11 @@ sharedRouter.post('/:id/verify', async (c) => {
     return c.json({ error: 'Invalid password' }, 401);
   }
   
-  const token = await sign({ id, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 }, c.env.JWT_SECRET, 'HS256');
+  const token = await sign(
+    { id, pv: await passwordVersion(link.passwordHash!), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 },
+    c.env.JWT_SECRET,
+    'HS256'
+  );
   setCookie(c, `shared_session_${id}`, token, { path: '/', httpOnly: true, secure: true, sameSite: 'None', maxAge: 60 * 60 * 24 });
   return c.json({ success: true });
 });
@@ -382,14 +419,14 @@ sharedRouter.get('/:id/download', async (c) => {
     return c.text('Downloads are disabled for this link', 403);
   }
 
-  if (link.maxDownloads !== null && link.maxDownloads !== undefined && link.downloadCount >= link.maxDownloads) {
+  // Claim a download atomically: a separate check and increment let concurrent
+  // requests exceed max_downloads.
+  const claim = await db.prepare(
+    'UPDATE shared_links SET download_count = download_count + 1 WHERE id = ? AND (max_downloads IS NULL OR download_count < max_downloads)'
+  ).bind(id).run();
+  if (claim.meta.changes === 0) {
     return c.text('Maximum download limit reached', 403);
   }
-
-  // Increment download count
-  c.executionCtx.waitUntil(
-    db.prepare('UPDATE shared_links SET download_count = download_count + 1 WHERE id = ?').bind(id).run()
-  );
 
   c.executionCtx.waitUntil(
     db.prepare('INSERT INTO shared_link_logs (shared_link_id, action) VALUES (?, ?)').bind(id, 'download').run()
