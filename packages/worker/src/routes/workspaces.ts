@@ -121,6 +121,14 @@ workspacesRouter.delete('/:id/members/:targetUserId', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
+  // Members can only remove people below their own level, and the owner can
+  // never be removed (that would leave the workspace without an owner).
+  const targetRole = await getWorkspaceRole(db, workspaceId, targetUserId);
+  if (!targetRole) return c.json({ error: 'Member not found' }, 404);
+  if (targetRole === 'owner' || hasPermission(targetRole, currentUserRole as Parameters<typeof hasPermission>[1])) {
+    return c.json({ error: 'You cannot remove a member with the same or a higher role' }, 403);
+  }
+
   await db.prepare('DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?').bind(workspaceId, targetUserId).run();
 
   const auditService = new AuditService(db);

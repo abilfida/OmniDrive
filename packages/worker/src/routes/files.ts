@@ -240,13 +240,19 @@ filesRouter.patch('/:id/rename', async (c) => {
 filesRouter.patch('/:id/move', async (c) => {
   const userId = c.get('userId');
   const fileId = c.req.param('id');
-  const { folderId } = await c.req.json();
+  // The web app sends workspaceFolderId; folderId is the older name.
+  const body = await c.req.json<{ workspaceFolderId?: string | null; folderId?: string | null }>();
+  const targetFolderId = body.workspaceFolderId !== undefined ? body.workspaceFolderId : (body.folderId ?? null);
+  const db = c.env.DB;
 
-  const folder = await c.env.DB.prepare('SELECT workspace_id FROM workspace_folders WHERE id = ?').bind(folderId).first<{ workspace_id: string }>();
-  if (!folder && folderId) throw new AppError(404, 'Folder not found');
+  const file = await db.prepare('SELECT id FROM files WHERE id = ? AND user_id = ?').bind(fileId, userId).first();
+  if (!file) throw new AppError(404, 'File not found');
 
-  await c.env.DB.prepare('UPDATE files SET workspace_folder_id = ?, workspace_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
-    .bind(folderId, folder?.workspace_id || null, fileId, userId).run();
+  // Moving into a workspace needs editor access there; taking your own file out of one doesn't.
+  const target = await resolveUploadWorkspace(db, userId, null, targetFolderId);
+
+  await db.prepare('UPDATE files SET workspace_folder_id = ?, workspace_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
+    .bind(target.workspaceFolderId, target.workspaceId, fileId, userId).run();
 
   return c.json({ success: true });
 });
