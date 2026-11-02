@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import type { WorkspaceFolder, FileEntry, DriveFolder, BreadcrumbItem } from '../types';
 import { WorkspaceSidebar } from '../components/workspaces/WorkspaceSidebar';
@@ -30,12 +30,23 @@ export function WorkspacesPage() {
     }
   }, [addToast]);
 
-  const fetchContents = useCallback(async (folderId: string, cursor?: string, isStale?: () => boolean) => {
+  // A response may only update the listing if it is for the folder still open and
+  // no newer full load (folder switch, refresh, sync) started after it. Otherwise
+  // a slow page or a delayed post-sync refresh overwrites or appends to the
+  // wrong folder.
+  const activeFolderRef = useRef<string | null>(null);
+  const loadGeneration = useRef(0);
+  const syncRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchContents = useCallback(async (folderId: string, cursor?: string) => {
+    if (!cursor) loadGeneration.current++;
+    const generation = loadGeneration.current;
+    const isStale = () => generation !== loadGeneration.current || folderId !== activeFolderRef.current;
     try {
       if (cursor) setIsLoadingMore(true);
       const res = await api.getFolderContents(folderId, cursor);
       
-      if (isStale?.()) return;
+      if (isStale()) return;
 
       if (cursor) {
         setFiles(prev => [...prev, ...res.files]);
@@ -47,10 +58,10 @@ export function WorkspacesPage() {
       setNextCursor(res.pagination?.nextCursor || null);
       setHasMore(res.pagination?.hasMore || false);
     } catch {
-      if (isStale?.()) return;
+      if (isStale()) return;
       addToast('error', 'Failed to load folder contents');
     } finally {
-      if (!isStale?.()) {
+      if (!isStale()) {
         setIsLoadingMore(false);
       }
     }
@@ -61,15 +72,19 @@ export function WorkspacesPage() {
   }, [fetchTree]);
 
   useEffect(() => {
-    let ignore = false;
+    activeFolderRef.current = activeFolderId;
+    setIsLoadingMore(false); // a page still loading for the previous folder is discarded
     if (activeFolderId) {
-      fetchContents(activeFolderId, undefined, () => ignore);
+      fetchContents(activeFolderId);
     } else {
+      loadGeneration.current++;
       setFiles([]);
       setSubfolders([]);
     }
     clearSelection();
-    return () => { ignore = true; };
+    return () => {
+      if (syncRefreshTimer.current) clearTimeout(syncRefreshTimer.current);
+    };
   }, [activeFolderId, clearSelection, fetchContents]);
 
   const handleCreateFolder = async (parentId?: string | null) => {
@@ -119,7 +134,8 @@ export function WorkspacesPage() {
     try {
       await api.syncWorkspace(activeFolderId);
       addToast('success', 'Sync started.');
-      setTimeout(() => fetchContents(activeFolderId), 2000);
+      if (syncRefreshTimer.current) clearTimeout(syncRefreshTimer.current);
+      syncRefreshTimer.current = setTimeout(() => fetchContents(activeFolderId), 2000);
     } catch {
       addToast('error', 'Failed to start sync');
     } finally {

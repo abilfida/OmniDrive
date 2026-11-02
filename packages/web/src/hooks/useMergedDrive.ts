@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { useDriveStore } from '../stores/driveStore';
 import { useToastStore } from '../stores/toastStore';
@@ -14,7 +14,14 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorDrives, setErrorDrives] = useState<Set<string>>(new Set());
 
-  const fetchContents = useCallback(async (abortSignal?: AbortSignal) => {
+  // Only the latest request may update state: a refresh or a slow response for a
+  // folder the user already left would otherwise overwrite the current listing.
+  const latestRequest = useRef(0);
+
+  const fetchContents = useCallback(async () => {
+    const requestId = ++latestRequest.current;
+    const isStale = () => requestId !== latestRequest.current;
+
     if (drives.length === 0) {
       setSubfolders([]);
       setFiles([]);
@@ -33,6 +40,7 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
         const promises = drives.map(drive => 
           api.getDriveFolderContents(drive.id, 'root')
             .catch(() => {
+              if (isStale()) return { folder: null, subfolders: [], files: [], breadcrumb: [] };
               addToast('error', `Failed to load drive: ${drive.email}`);
               setErrorDrives(prev => new Set(prev).add(drive.id));
               return { folder: null, subfolders: [], files: [], breadcrumb: [] };
@@ -40,7 +48,7 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
         );
         
         const results = await Promise.all(promises);
-        if (abortSignal?.aborted) return;
+        if (isStale()) return;
         
         const mergedFolders = results.flatMap(r => r.subfolders);
         const mergedFiles = results.flatMap(r => r.files);
@@ -55,28 +63,27 @@ export function useMergedDrive(folderId: string, driveIdParam: string | null) {
       } else {
         // Fetch specific sub-folder for a specific drive
         const data = await api.getDriveFolderContents(driveIdParam, folderId);
-        if (abortSignal?.aborted) return;
+        if (isStale()) return;
         setSubfolders(data.subfolders);
         setFiles(data.files);
         setBreadcrumb(data.breadcrumb || [{ id: 'root', name: 'All Files' }]);
       }
     } catch (err) {
-      if (abortSignal?.aborted) return;
+      if (isStale()) return;
       addToast('error', 'Failed to load folder contents');
     } finally {
-      if (!abortSignal?.aborted) {
+      if (!isStale()) {
         setIsLoading(false);
       }
     }
   }, [folderId, driveIdParam, drives, addToast]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchContents(controller.signal);
+    fetchContents();
     return () => {
-      controller.abort();
+      latestRequest.current++; // whatever is in flight is now stale
     };
   }, [fetchContents]);
 
-  return { subfolders, files, breadcrumb, isLoading, errorDrives, refresh: () => fetchContents() };
+  return { subfolders, files, breadcrumb, isLoading, errorDrives, refresh: fetchContents };
 }

@@ -24,25 +24,33 @@ export const Omnibar: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Set when the query changes again: a slower response for an older query
+    // must not replace the results for the current one.
+    let ignore = false;
     const delayDebounceFn = setTimeout(async () => {
       if (!query.trim() && !metadataKey.trim()) {
         setResults([]);
+        setIsSearching(false);
         return;
       }
       setIsSearching(true);
       try {
         const metadata = metadataKey && metadataValue ? { [metadataKey]: metadataValue } : undefined;
         const res = await api.globalSearch(query, undefined, metadata);
+        if (ignore) return;
         setResults(res.files);
         setIsOpen(true);
       } catch (err) {
-        console.error('Search failed', err);
+        if (!ignore) console.error('Search failed', err);
       } finally {
-        setIsSearching(false);
+        if (!ignore) setIsSearching(false);
       }
     }, 300);
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => {
+      ignore = true;
+      clearTimeout(delayDebounceFn);
+    };
   }, [query, metadataKey, metadataValue]);
 
   return (
