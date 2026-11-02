@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.3] - 2026-11-03
+
+### Fixed
+
+- **Blank pages after errors:** An error while rendering a page no longer blanks the whole app. The page shows "Something went wrong" with Try again and Reload buttons, the sidebar keeps working, and moving to another page recovers.
+- **Expired sessions:** When your session expires, you are taken to the login page instead of seeing "Failed to load" errors everywhere. After logging in you return to the page you were on.
+- **Hung or unreachable server:** Requests give up after 30 seconds with a clear message, and an unreachable server is reported as such instead of the app staying on a blank loading screen.
+- **Lists showing the wrong folder:** A slow response could replace the folder or search results you had moved on to. This affected refreshing after a rename or upload, the reload after a workspace sync, "load more" and the search box.
+- **Drives failing to load:** A failed drive list now shows the error with a Retry button instead of "No Google Drive connected".
+- **Unknown links:** Unknown URLs show a "Page not found" page instead of an empty screen.
+- **Accessibility:** Dialogs close with the Escape key (except while an upload is running) and are announced as dialogs, and notifications are read out by screen readers.
+
+### Changed
+
+- **Faster first load:** Pages now load on demand, so the first download shrinks from about 596 kB to about 399 kB.
+- **Admin page:** It is only reachable for super admins; other users are sent to the dashboard.
+
+### Upgrade notes
+
+- Web app only; the API and database are unchanged.
+
 ## [0.11.2] - 2026-11-02
 
 ### Security
