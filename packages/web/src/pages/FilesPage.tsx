@@ -26,7 +26,7 @@ export function FilesPage() {
   const driveIdParam = searchParams.get('driveId');
   const navigate = useNavigate();
   
-  const { drives, fetchDrives, isLoading: isDrivesLoading } = useDriveStore();
+  const { drives, fetchDrives, isLoading: isDrivesLoading, error: drivesError } = useDriveStore();
   const { showModal, setShowModal } = useUploadStore();
   const { addToast } = useToastStore();
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
@@ -172,6 +172,18 @@ export function FilesPage() {
           <div className="flex flex-col items-center justify-center p-16">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4" />
             <p className="text-gray-500">Loading folder contents...</p>
+          </div>
+        ) : drives.length === 0 && drivesError ? (
+          <div role="alert" className="text-center p-12 text-gray-500 border rounded-lg bg-white m-4 flex flex-col items-center shadow-sm">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Couldn't load your drives</h3>
+            <p className="mb-6 max-w-sm text-center">{drivesError}</p>
+            <button
+              type="button"
+              onClick={() => fetchDrives()}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors"
+            >
+              Retry
+            </button>
           </div>
         ) : drives.length === 0 ? (
           <div className="text-center p-12 text-gray-500 border rounded-lg bg-white m-4 flex flex-col items-center shadow-sm">
