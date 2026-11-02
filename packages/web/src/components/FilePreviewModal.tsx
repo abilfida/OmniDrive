@@ -9,14 +9,17 @@ interface FilePreviewModalProps {
 }
 
 import { useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
   const isImage = file.mimeType?.startsWith('image/');
   const isGoogleDoc = file.mimeType?.startsWith('application/vnd.google-apps.');
   const [imageError, setImageError] = useState(false);
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-full" 
         onClick={(e) => e.stopPropagation()}

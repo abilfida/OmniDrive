@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Copy, Check, Share2, Calendar, Lock, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { createSharedLink } from '../lib/api';
 import { useSharedStore } from '../stores/sharedStore';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface ShareModalProps {
   targetType: 'file' | 'folder';
@@ -85,8 +86,10 @@ export function ShareModal({ targetType, targetId, onClose }: ShareModalProps) {
 
   const currentDateTime = new Date().toISOString().slice(0, 16);
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-full" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100 shrink-0">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">

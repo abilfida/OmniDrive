@@ -12,10 +12,10 @@ const icons: Record<ToastType, React.ReactNode> = {
 export function ToastContainer() {
   const { toasts, removeToast } = useToastStore();
 
-  if (toasts.length === 0) return null;
-
+  // Always rendered: screen readers only announce changes to a live region that
+  // already exists, so mounting it together with the first toast is too late.
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+    <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
       {toasts.map((toast) => (
         <div 
           key={toast.id} 
