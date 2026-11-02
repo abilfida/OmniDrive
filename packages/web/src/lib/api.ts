@@ -11,21 +11,63 @@ class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+// Paths where a 401 is an expected answer (wrong password, locked share link),
+// not a sign that the signed-in session expired.
+const UNAUTHENTICATED_PATHS = ['/api/auth/', '/api/shared/'];
+
+let unauthorizedHandler: (() => void) | null = null;
+
+// Registered by the auth store so an expired session sends the user to login
+// instead of leaving every page showing generic "failed to load" errors.
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
+// Where to go after login. Only same-site paths, so ?next= can't be used as an open redirect.
+export function safeRedirectPath(next: string | null | undefined): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/';
+  return next;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const signal = options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    });
+  } catch (err) {
+    if (options?.signal?.aborted) throw err; // cancelled by the caller
+    if (timeout.aborted) throw new ApiError(0, 'The server took too long to respond. Please try again.');
+    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+  }
 
   if (!response.ok) {
+    if (response.status === 401 && !UNAUTHENTICATED_PATHS.some((p) => path.startsWith(p))) {
+      unauthorizedHandler?.();
+    }
     const body = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new ApiError(response.status, body.error ?? `HTTP ${response.status}`);
   }
 
+  if (response.status === 204 || response.headers.get('Content-Length') === '0') {
+    return undefined as T;
+  }
+  // A proxy or static host answering /api/* with its HTML page would otherwise
+  // surface as "Unexpected token <".
+  if (!(response.headers.get('Content-Type') ?? '').includes('application/json')) {
+    throw new ApiError(response.status, 'Unexpected response from the server. Is the API reachable at this address?');
+  }
   return response.json();
 }
 
