@@ -1,6 +1,6 @@
 // packages/web/src/pages/LoginPage.tsx
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api, safeRedirectPath } from '../lib/api';
 
 export function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
@@ -20,7 +20,7 @@ export function LoginPage() {
       } else {
         await api.login({ username, password });
       }
-      window.location.href = '/';
+      window.location.href = safeRedirectPath(new URLSearchParams(window.location.search).get('next'));
     } catch (err: any) {
       setErrorMsg(err.message || 'Authentication failed');
     }

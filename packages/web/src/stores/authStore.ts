@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { User } from '../types';
-import { api } from '../lib/api';
+import { api, setUnauthorizedHandler } from '../lib/api';
 
 interface AuthState {
   user: User | null;
@@ -32,3 +32,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
+
+// Any authenticated request that comes back 401 means the session expired:
+// drop the user so AuthGuard sends them to the login page.
+setUnauthorizedHandler(() => {
+  useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
+});
