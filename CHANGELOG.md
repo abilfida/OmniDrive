@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.4] - 2026-11-03
+
+### Security
+
+- **Moving files into workspaces:** You can only move a file into a workspace where you have editor access. Before, any user could add files to another team's workspace and its S3 bucket.
+- **Removing workspace members:** Managers can no longer remove the workspace owner or other managers.
+- **Share links:**
+  - An expiry date that isn't a valid date is rejected; such a link used to never expire.
+  - The download limit can no longer be exceeded by simultaneous downloads.
+  - Changing a link's password signs out visitors who unlocked it with the old one.
+
+### Fixed
+
+- **Moving files from the web app:** Moving a file into a workspace folder from the app removed it from the workspace instead.
+- **Automations:**
+  - Rules no longer re-process and re-log every matching file on every run.
+  - Logs older than 30 days are removed.
+  - Large libraries are processed over several runs without skipping files.
+  - "Move" actions also assign the file to the folder's workspace.
+- **Connecting Google Drive:** Connecting a Google account that another OmniDrive user already linked no longer fails with a server error.
+
+### Changed
+
+- **Automation rule validation:** New rules are checked when they are created. Unknown fields, operators or actions, a move without a target you can edit, and a delete rule without conditions (which would trash every file) are rejected.
+
+### Upgrade notes
+
+- Visitors of password-protected share links need to enter the password once more after upgrading.
+- No database migration is needed.
+
 ## [0.11.3] - 2026-11-03
 
 ### Fixed
