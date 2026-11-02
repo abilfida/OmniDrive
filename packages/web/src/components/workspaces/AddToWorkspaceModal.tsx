@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import type { WorkspaceFolder, FileEntry } from '../../types';
 import { X, Folder } from 'lucide-react';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 
 interface Props {
   file: FileEntry;
@@ -27,8 +28,10 @@ export function AddToWorkspaceModal({ file, onClose, onSuccess }: Props) {
     }
   };
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
       <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-xl font-semibold">Add to Workspace</h2>
